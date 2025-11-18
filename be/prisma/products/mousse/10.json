@@ -1,0 +1,12 @@
+{
+    "id": 10,
+    "name": "Mousse Bưởi Thanh Trà",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake10.jpg",
+    "category": "Bánh Mousse",
+    "description": "Bánh mousse bưởi thanh trà thơm mát, dịu nhẹ.",
+    "sizes": [
+      { "size": "12cm", "price": 90000 },
+      { "size": "16cm", "price": 120000 },
+      { "size": "20cm", "price": 160000 }
+    ]
+}

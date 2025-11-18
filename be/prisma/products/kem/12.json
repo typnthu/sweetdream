@@ -1,0 +1,12 @@
+  {
+    "id": 12,
+    "name": "Bánh Kem Lãn Mạn",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake12.jpg",
+    "category": "Bánh Kem",
+    "description": "Bánh kem lãn mạn, trọn vẹn bên người thương.",
+    "sizes": [
+      { "size": "12cm", "price": 80000 },
+      { "size": "16cm", "price": 130000 },
+      { "size": "20cm", "price": 170000 }
+    ]
+  }

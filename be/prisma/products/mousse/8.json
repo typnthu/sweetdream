@@ -1,0 +1,12 @@
+{
+    "id": 8,
+    "name": "Mousse Bơ",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake8.jpg",
+    "category": "Bánh Mousse",
+    "description": "Bánh mousse bơ thơm béo, mịn màng.",
+    "sizes": [
+      { "size": "12cm", "price": 90000 },
+      { "size": "16cm", "price": 120000 },
+      { "size": "20cm", "price": 160000 }
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "id": 9,
+    "name": "Mousse Mãng Cầu Dâu",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake9.jpg",
+    "category": "Bánh Mousse",
+    "description": "Bánh mousse mãng cầu dâu tây thơm mát, dịu nhẹ.",
+    "sizes": [
+      { "size": "12cm", "price": 90000 },
+      { "size": "16cm", "price": 120000 },
+      { "size": "20cm", "price": 160000 }
+    ]
+}

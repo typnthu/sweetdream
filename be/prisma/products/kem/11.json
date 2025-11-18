@@ -1,0 +1,12 @@
+  {
+    "id":11,
+    "name": "Bánh Kem Nho Xanh",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake11.jpg",
+    "category": "Bánh Kem",
+    "description": "Bánh kem hoa màu xanh lá nhẹ nhàng tươi mới.",
+    "sizes": [
+      { "size": "12cm", "price": 80000 },
+      { "size": "16cm", "price": 130000 },
+      { "size": "20cm", "price": 170000 }
+    ]
+  }

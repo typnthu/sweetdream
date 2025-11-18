@@ -1,0 +1,8 @@
+{
+    "id": 5,
+    "name":"Bánh chuối So-co-la",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake5.jpg",
+    "category": "Bánh Nướng",
+    "description": "Bánh chuối phủ socola thơm ngon.",
+    "sizes": [{"size": "M","price": 80000}]
+}

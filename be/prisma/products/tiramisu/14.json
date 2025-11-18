@@ -1,0 +1,12 @@
+  {
+    "id": 14,
+    "name": "Tiramisu Hình Gấu",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake14.jpg",
+    "category": "Tiramisu",
+    "description": "Tiramisu hình gấu dễ thương.",
+    "sizes": [
+        { "size": "12cm", "price": 100000 },
+        { "size": "16cm", "price": 150000 },
+        { "size": "20cm", "price": 190000 }
+    ]
+  }

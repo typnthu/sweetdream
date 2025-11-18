@@ -1,0 +1,11 @@
+  {
+    "id": 4,
+    "name": "Bánh Mì Ngọt Nhân Dừa",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake4.png",
+    "category": "Bánh Nướng",
+    "description": "Bánh mì ngọt nhân dừa mềm thơm.",
+    "sizes": [
+        { "size": "1 cái", "price": 15000 },
+        { "size": "Hộp 6 cái", "price": 80000 }
+    ]
+  }

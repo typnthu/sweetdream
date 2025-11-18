@@ -1,0 +1,12 @@
+  {
+    "id": 13,
+    "name": "Bánh Kem Bươm Bướm",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake13.jpg",
+    "category": "Bánh Kem",
+    "description": "Bánh kem bươm bướm.",
+    "sizes": [
+      { "size": "12cm", "price": 80000 },
+      { "size": "16cm", "price": 130000 },
+      { "size": "20cm", "price": 170000 }
+    ]
+  }

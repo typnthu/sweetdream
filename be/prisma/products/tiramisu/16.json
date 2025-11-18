@@ -1,0 +1,12 @@
+  {
+    "id": 16,
+    "name": "Tiramisu Trái Cây",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake16.webp",
+    "category": "Tiramisu",
+    "description": "Tiramisu trái cây tươi mát.",
+    "sizes": [
+        { "size": "12cm", "price": 100000 },
+        { "size": "16cm", "price": 150000 },
+        { "size": "20cm", "price": 190000 }
+    ]
+  }

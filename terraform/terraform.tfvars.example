@@ -1,0 +1,19 @@
+# VPC Configuration
+#vpc_cidr = "10.0.0.0/16"
+
+# ECS Configuration
+#cluster_name = "sweetdream-cluster"
+#task_name    = "sweetdream-task"
+#service_name = "sweetdream-service"
+
+# Docker Images (Replace with your ECR image URIs after pushing)
+#backend_image  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest"
+#frontend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sweetdream-frontend:latest"
+
+# Database Configuration
+db_name     = "sweetdream"
+db_username = "admin"
+db_password = "admin123!"  # Change this!
+
+# S3 Configuration
+#s3_bucket_name = "sweetdream-logs-data-12345"  # Must be globally unique

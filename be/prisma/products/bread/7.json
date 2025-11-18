@@ -1,0 +1,14 @@
+{
+    "id": 7,
+    "name": "Bánh Sừng bò",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake7.jpg",
+    "category": "Bánh Nướng",
+    "description": "Bánh sừng bò thơm ngon mỗi sáng.",
+    "sizes": [
+        {
+        "size": "M",
+        "price": 35000
+        }
+    ]
+
+}

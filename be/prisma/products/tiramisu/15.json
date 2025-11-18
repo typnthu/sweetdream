@@ -1,0 +1,11 @@
+  {
+    "id": 15,
+    "name": "Tiramisu",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake15.webp",
+    "category": "Tiramisu",
+    "description": "Tiramisu béo mịn thơm ngon.",
+    "sizes": [
+        { "size": "Nhỏ", "price": 75000 },
+        { "size": "Lớn", "price": 100000 }
+    ]
+  }

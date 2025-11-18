@@ -1,0 +1,13 @@
+{
+    "id": 6,
+    "name": "Bánh So-co-la",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake6.jpg",
+    "category": "Bánh Nướng",
+    "description": "Bánh nướng thơm mềm cùng lớp phủ so-co-la ngọt ngào.",
+    "sizes": [
+        {
+        "size": "M",
+        "price": 35000
+        }
+    ]
+}

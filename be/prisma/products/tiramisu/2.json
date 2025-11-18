@@ -1,0 +1,12 @@
+  {
+    "id": 2,
+    "name": "Tiramisu Dâu",
+    "img": "https://sweetdream-products-data.s3.us-east-1.amazonaws.com/cake2.png",
+    "category": "Tiramisu",
+    "description": "Tiramisu hương dâu với lớp kem mascarpone béo mịn.",
+    "sizes": [
+        { "size": "12cm", "price": 100000 },
+        { "size": "16cm", "price": 150000 },
+        { "size": "20cm", "price": 190000 }
+    ]
+  }
