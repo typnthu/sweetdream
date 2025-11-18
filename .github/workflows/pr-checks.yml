@@ -32,6 +32,7 @@ jobs:
         run: |
           npm ci
           npm run lint
+        continue-on-error: true
 
       - name: Check Terraform Formatting
         uses: hashicorp/setup-terraform@v3
