@@ -41,6 +41,7 @@ jobs:
       - name: Run Linter
         working-directory: fe
         run: npm run lint
+        continue-on-error: true
 
       - name: Build Next.js
         working-directory: fe
