@@ -21,7 +21,6 @@ jobs:
   build-and-push-backend:
     name: Build & Push Backend
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     outputs:
       image: ${{ steps.build-backend-image.outputs.image }}
@@ -65,7 +64,6 @@ jobs:
   build-and-push-frontend:
     name: Build & Push Frontend
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     outputs:
       image: ${{ steps.build-frontend-image.outputs.image }}
