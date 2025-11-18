@@ -93,7 +93,8 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     if (error instanceof APIError) {
       throw error;
     }
-    throw new Error(`Failed to fetch ${endpoint}: ${error.message}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to fetch ${endpoint}: ${message}`);
   }
 }
 

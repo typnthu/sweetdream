@@ -27,7 +27,7 @@ You're looking at a **fully automated CI/CD pipeline** for the SweetDream e-comm
 
 ```bash
 # 1. Setup
-./scripts/setup-cicd.sh
+
 
 # 2. Configure GitHub Secrets
 
