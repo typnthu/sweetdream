@@ -1,26 +1,68 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
-import { useState } from "react";
-import products from "@/products/index";
+import { getProduct, getProducts, type Product } from "@/lib/api";
 
 export default function ProductDetail() {
   const params = useParams();
   const id = Number(params?.id);
-  const product = products.find((p) => p.id === id);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const { addToCart, cart, updateQuantity, removeFromCart } = useCart();
   const { isAuthenticated } = useAuth();
   const router = useRouter();
 
-  const [selectedSize, setSelectedSize] = useState(product?.sizes?.[0] || null);
+  const [selectedSize, setSelectedSize] = useState<any>(null);
   const [qty, setQty] = useState(1);
   const [showModal, setShowModal] = useState(false);
 
-  if (!product) return <div className="p-6 text-red-500">Không tìm thấy sản phẩm.</div>;
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const [productData, productsData] = await Promise.all([
+          getProduct(id),
+          getProducts()
+        ]);
+        setProduct(productData);
+        setAllProducts(productsData);
+        setSelectedSize(productData.sizes?.[0] || null);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch product:', err);
+        setError('Không thể tải sản phẩm. Vui lòng thử lại sau.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (id) {
+      fetchData();
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-gray-600">Đang tải sản phẩm...</p>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-red-500">{error || 'Không tìm thấy sản phẩm.'}</p>
+      </div>
+    );
+  }
 
   const handleAddCart = () => {
     if (!isAuthenticated) {
@@ -145,8 +187,8 @@ export default function ProductDetail() {
   <h2 className="text-2xl font-bold mb-2">Sản phẩm tương tự</h2>
    <p className="text-gray-600 mb-6"> SweetDream chuyên các loại bánh ngọt thơm ngon, được làm từ nguyên liệu tươi sạch và công thức độc quyền. Khách hàng có thể lựa chọn từ bánh mousse, tiramisu, bánh kem, đến bánh mì ngọt. Hãy khám phá và thêm vào giỏ hàng những món bánh yêu thích! </p>
   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-    {products
-      .filter((p) => p.category === product.category && p.id !== product.id)
+    {allProducts
+      .filter((p) => p.category.id === product.category.id && p.id !== product.id)
       .slice(0, 8) // hiển thị tối đa 8 sản phẩm tương tự
       .map((p) => (
         <div 
@@ -174,7 +216,7 @@ export default function ProductDetail() {
 <div className="mt-6">
   <h2 className="text-2xl font-bold mb-2">Khám phá cửa hàng</h2>
   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-    {products.slice(0, 20).map((p) => (
+    {allProducts.slice(0, 20).map((p) => (
       <div 
         key={p.id} 
         className="border rounded-lg p-3 hover:shadow-lg cursor-pointer transition-shadow"
