@@ -75,6 +75,59 @@ module "ecs_backend" {
   s3_bucket   = module.s3.bucket_name
 }
 
+module "ecs_user_service" {
+  source = "./modules/ecs"
+
+  cluster_name               = var.cluster_name
+  task_name                  = "${var.task_name}-user-service"
+  service_name               = "${var.service_name}-user-service"
+  container_image            = var.user_service_image
+  container_name             = "sweetdream-user-service"
+  container_port             = 3001
+  private_subnet_ids         = module.vpc.private_subnets
+  ecs_security_group_id      = module.vpc.ecs_security_group_id
+  execution_role_arn         = module.iam.ecs_execution_role_arn
+  task_role_arn              = module.iam.ecs_task_role_arn
+  target_group_arn           = ""  # Not exposed via ALB
+  enable_load_balancer       = false
+  service_discovery_arn      = module.service_discovery.user_service_arn
+  enable_service_discovery   = true
+
+  db_host     = module.rds.db_address
+  db_name     = var.db_name
+  db_username = var.db_username
+  db_password = var.db_password
+  s3_bucket   = ""
+}
+
+module "ecs_order_service" {
+  source = "./modules/ecs"
+
+  cluster_name               = var.cluster_name
+  task_name                  = "${var.task_name}-order-service"
+  service_name               = "${var.service_name}-order-service"
+  container_image            = var.order_service_image
+  container_name             = "sweetdream-order-service"
+  container_port             = 3002
+  private_subnet_ids         = module.vpc.private_subnets
+  ecs_security_group_id      = module.vpc.ecs_security_group_id
+  execution_role_arn         = module.iam.ecs_execution_role_arn
+  task_role_arn              = module.iam.ecs_task_role_arn
+  target_group_arn           = ""  # Not exposed via ALB
+  enable_load_balancer       = false
+  service_discovery_arn      = module.service_discovery.order_service_arn
+  enable_service_discovery   = true
+
+  db_host     = module.rds.db_address
+  db_name     = var.db_name
+  db_username = var.db_username
+  db_password = var.db_password
+  s3_bucket   = ""
+  
+  # Order service needs to call user service
+  backend_url = "http://${module.service_discovery.user_service_dns_name}:3001"
+}
+
 module "ecs_frontend" {
   source = "./modules/ecs"
 

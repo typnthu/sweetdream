@@ -80,6 +80,10 @@ resource "aws_ecs_task_definition" "app" {
           value = var.backend_url
         },
         {
+          name  = "USER_SERVICE_URL"
+          value = var.backend_url
+        },
+        {
           name  = "NEXT_PUBLIC_API_URL"
           value = "/api/proxy"
         }

@@ -1,4 +1,4 @@
-name: Optimized Deploy (Smart Terraform + App)
+name: Deploy
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
               - 'fe/**'
               - 'order-service/**'
               - 'user-service/**'
-              - '.github/workflows/deploy-optimized.yml'
+              - '.github/workflows/deploy.yml'
 
   # Deploy infrastructure ONLY if terraform files changed
   deploy-infrastructure:

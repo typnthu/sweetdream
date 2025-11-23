@@ -28,6 +28,16 @@ variable "frontend_image" {
   default     = "nginx:latest"
 }
 
+variable "user_service_image" {
+  description = "Docker image for the user service"
+  default     = "nginx:latest"
+}
+
+variable "order_service_image" {
+  description = "Docker image for the order service"
+  default     = "nginx:latest"
+}
+
 variable "db_name" {
   description = "Database name"
   default     = "sweetdream"
