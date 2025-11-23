@@ -108,7 +108,7 @@ function SuccessContent() {
     }
   }, [orderId, isFromCheckout, orders]);
 
-  const handleViewOrderDetail = (order: Order) => {
+  const handleViewOrderDetail = (order: BackendOrder) => {
     setSelectedOrder(order);
     setShowOrderDetail(true);
   };
