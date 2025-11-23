@@ -1,6 +1,6 @@
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/sweetdream"
+  name              = "/ecs/sweetdream-${var.service_name}"
   retention_in_days = 7
 
   lifecycle {
@@ -9,7 +9,7 @@ resource "aws_cloudwatch_log_group" "app" {
   }
 
   tags = {
-    Name = "SweetDream ECS Logs"
+    Name = "SweetDream ECS Logs - ${var.service_name}"
   }
 }
 

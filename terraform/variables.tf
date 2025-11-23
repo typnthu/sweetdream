@@ -45,7 +45,7 @@ variable "db_name" {
 
 variable "db_username" {
   description = "Database username"
-  default     = "admin"
+  default     = "postgres"
   sensitive   = true
 }
 
