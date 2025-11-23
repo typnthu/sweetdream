@@ -103,6 +103,24 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
       
+      - name: Create ECR Repositories if needed
+        run: |
+          echo "🐳 Ensuring ECR repositories exist..."
+          
+          repos=("sweetdream-backend" "sweetdream-frontend" "sweetdream-user-service" "sweetdream-order-service")
+          
+          for repo in "${repos[@]}"; do
+            echo "Checking repository: $repo"
+            aws ecr describe-repositories --repository-names $repo --region ${{ env.AWS_REGION }} 2>/dev/null || \
+            aws ecr create-repository \
+              --repository-name $repo \
+              --image-scanning-configuration scanOnPush=true \
+              --encryption-configuration encryptionType=AES256 \
+              --region ${{ env.AWS_REGION }} && \
+            echo "✅ Created repository: $repo" || \
+            echo "ℹ️  Repository already exists: $repo"
+          done
+      
       - name: Get ALB URL
         id: get-alb
         run: |
@@ -172,16 +190,52 @@ jobs:
       - name: Force new deployment for all services
         run: |
           echo "🚀 Deploying all services..."
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-backend --force-new-deployment
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-frontend --force-new-deployment
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-order-service --force-new-deployment
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-user-service --force-new-deployment
+          
+          # Correct service names from Terraform: ${var.service_name}-{backend|frontend|user-service|order-service}
+          # Default service_name = "sweetdream-service"
+          
+          services=(
+            "sweetdream-service-backend"
+            "sweetdream-service-frontend"
+            "sweetdream-service-user-service"
+            "sweetdream-service-order-service"
+          )
+          
+          for service in "${services[@]}"; do
+            echo "Deploying: $service"
+            if aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services $service --query 'services[0].serviceName' --output text 2>/dev/null | grep -q "$service"; then
+              aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service $service --force-new-deployment
+              echo "✅ Deployed: $service"
+            else
+              echo "⚠️  Service not found: $service (will be created by Terraform)"
+            fi
+          done
       
       - name: Wait for services to stabilize
         run: |
           echo "⏳ Waiting for services to stabilize..."
-          aws ecs wait services-stable --cluster ${{ env.ECS_CLUSTER }} --services sweetdream-backend sweetdream-frontend sweetdream-order-service sweetdream-user-service
-          echo "✅ All services are stable!"
+          
+          services=(
+            "sweetdream-service-backend"
+            "sweetdream-service-frontend"
+            "sweetdream-service-user-service"
+            "sweetdream-service-order-service"
+          )
+          
+          # Only wait for services that exist
+          existing_services=()
+          for service in "${services[@]}"; do
+            if aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services $service --query 'services[0].serviceName' --output text 2>/dev/null | grep -q "$service"; then
+              existing_services+=("$service")
+            fi
+          done
+          
+          if [ ${#existing_services[@]} -gt 0 ]; then
+            aws ecs wait services-stable --cluster ${{ env.ECS_CLUSTER }} --services "${existing_services[@]}"
+            echo "✅ All services are stable!"
+          else
+            echo "⚠️  No existing services found to wait for"
+          fi
 
   # Summary
   deployment-summary:
