@@ -58,7 +58,13 @@ function LoginForm() {
       }
 
       if (success) {
-        router.push(redirectTo);
+        // Check if user is admin and redirect accordingly
+        const userData = JSON.parse(localStorage.getItem('sweetdream_user') || '{}');
+        if (userData.role === 'admin') {
+          router.push('/admin'); // Admin goes to admin panel
+        } else {
+          router.push(redirectTo); // Customer goes to original destination
+        }
       }
     } catch (error) {
       setError("Có lỗi xảy ra, vui lòng thử lại!");
@@ -85,10 +91,17 @@ function LoginForm() {
 
         {/* Demo Account Info */}
         {isLogin && (
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-700 font-medium mb-2">Tài khoản demo:</p>
-            <p className="text-sm text-blue-600">Email: user@example.com</p>
-            <p className="text-sm text-blue-600">Mật khẩu: 123456</p>
+          <div className="mb-6 space-y-3">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-700 font-medium mb-2">👤 Tài khoản khách hàng:</p>
+              <p className="text-sm text-blue-600">Email: user@example.com</p>
+              <p className="text-sm text-blue-600">Mật khẩu: 123456</p>
+            </div>
+            <div className="p-4 bg-pink-50 rounded-lg border border-pink-200">
+              <p className="text-sm text-pink-700 font-medium mb-2">👨‍💼 Tài khoản admin:</p>
+              <p className="text-sm text-pink-600">Email: admin@sweetdream.com</p>
+              <p className="text-sm text-pink-600">Mật khẩu: admin123</p>
+            </div>
           </div>
         )}
 

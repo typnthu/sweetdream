@@ -2,15 +2,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import { useOrders } from "@/context/OrderContext";
 import { useAuth } from "@/context/AuthContext";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthGuard from "@/components/AuthGuard";
+import { formatPrice } from "@/lib/formatPrice";
 
 export default function Cart() {
   const { cart, removeFromCart, clearCart, updateQuantity } = useCart();
-  const { addOrder } = useOrders();
   const { user } = useAuth();
   const router = useRouter();
   const [customerInfo, setCustomerInfo] = useState({
@@ -31,45 +30,87 @@ export default function Cart() {
     setCustomerInfo(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (!customerInfo.name || !customerInfo.email || !customerInfo.phone || !customerInfo.address) {
       alert("Vui lòng điền đầy đủ thông tin!");
       return;
     }
 
-    // Create order using OrderContext
-    const newOrder = addOrder({
-      status: "PLACED",
-      customer: customerInfo,
-      items: cart.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.qty,
-        img: item.img,
-        originalProductId: item.originalProductId
-      })),
-      total: total,
-      shipping: shipping
-    });
+    try {
+      // Create order in database via API
+      const orderPayload = {
+        customer: {
+          name: customerInfo.name,
+          email: customerInfo.email,
+          phone: customerInfo.phone,
+          address: customerInfo.address
+        },
+        items: cart.map(item => ({
+          productId: item.originalProductId || item.id,
+          size: item.name.split(' - ')[1] || '16cm', // Extract size from name or default
+          price: item.price,
+          quantity: item.qty
+        })),
+        notes: '' // Optional: add notes field if needed
+      };
 
-    setOrderData(newOrder);
-    setShowSuccessModal(true);
+      const response = await fetch('/api/proxy/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderPayload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to create order:', error);
+        alert('Không thể tạo đơn hàng. Vui lòng thử lại!');
+        return;
+      }
+
+      const result = await response.json();
+      const createdOrder = result.order;
+
+      // Use the order data from database
+      setOrderData({
+        id: createdOrder.id,
+        orderNumber: `ORD-${createdOrder.id}`,
+        date: new Date(createdOrder.createdAt).toLocaleDateString('vi-VN'),
+        status: createdOrder.status,
+        customer: createdOrder.customer,
+        items: createdOrder.items.map((item: any) => ({
+          id: item.id,
+          name: `${item.product.name} - ${item.size}`,
+          price: Number(item.price),
+          quantity: item.quantity,
+          img: item.product.img,
+          originalProductId: item.productId
+        })),
+        total: Number(createdOrder.total),
+        shipping: Number(createdOrder.shipping),
+        estimatedDelivery: new Date(Date.now() + 4 * 60 * 60 * 1000).toLocaleString('vi-VN')
+      });
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('Có lỗi xảy ra khi đặt hàng. Vui lòng thử lại!');
+    }
   };
 
   return (
     <AuthGuard showLoginPrompt={true}>
       <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-8 text-pink-600">🛒 Giỏ hàng</h1>
+      <h1 className="text-2xl font-bold mb-8 text-pink-500">🛒 Giỏ hàng</h1>
 
       {cart.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-gray-500 text-xl mb-4">Giỏ hàng trống</p>
           <Link
             href="/"
-            className="bg-pink-600 text-white px-6 py-3 rounded-lg hover:bg-pink-700 transition"
+            className="bg-white text-pink-500 px-3 py-3 rounded-lg hover:text-pink-700 transition"
           >
-            Tiếp tục mua sắm
+            Khám phá sản phẩm
           </Link>
         </div>
       ) : (
@@ -122,7 +163,7 @@ export default function Cart() {
                       {item.name}
                     </p>
                     <p className="text-pink-500 font-bold">
-                      {item.price.toLocaleString()} VND
+                      {formatPrice(item.price)}
                     </p>
 
                     {/* Điều chỉnh số lượng */}
@@ -147,7 +188,7 @@ export default function Cart() {
                 {/* Tổng tiền */}
                 <div className="text-right">
                   <p className="font-bold text-lg text-pink-600">
-                    {(item.price * item.qty).toLocaleString()} VND
+                    {formatPrice(item.price * item.qty)}
                   </p>
                 </div>
               </div>
@@ -230,15 +271,15 @@ export default function Cart() {
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-gray-600">
                   <span>Tạm tính:</span>
-                  <span>{total.toLocaleString()} VND</span>
+                  <span>{formatPrice(total)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Phí vận chuyển:</span>
-                  <span>{shipping.toLocaleString()} VND</span>
+                  <span>{formatPrice(shipping)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold text-pink-600 border-t pt-2">
                   <span>Tổng cộng:</span>
-                  <span>{finalTotal.toLocaleString()} VND</span>
+                  <span>{formatPrice(finalTotal)}</span>
                 </div>
               </div>
 
@@ -303,7 +344,7 @@ export default function Cart() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-pink-600">
-                        {(item.price * item.quantity).toLocaleString()} VND
+                        {formatPrice(item.price * item.quantity)}
                       </p>
                     </div>
                   </div>
@@ -315,15 +356,15 @@ export default function Cart() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-gray-600">
                     <span>Tạm tính:</span>
-                    <span>{orderData.total.toLocaleString()} VND</span>
+                    <span>{formatPrice(orderData.total)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Phí vận chuyển:</span>
-                    <span>{orderData.shipping.toLocaleString()} VND</span>
+                    <span>{formatPrice(orderData.shipping)}</span>
                   </div>
                   <div className="flex justify-between text-lg font-bold text-pink-600 border-t pt-2">
                     <span>Tổng cộng:</span>
-                    <span>{(orderData.total + orderData.shipping).toLocaleString()} VND</span>
+                    <span>{formatPrice(orderData.total + orderData.shipping)}</span>
                   </div>
                 </div>
               </div>

@@ -7,11 +7,13 @@ export type User = {
   email: string;
   phone?: string;
   address?: string;
+  role?: 'customer' | 'admin'; // Add role field
 };
 
 type AuthContextType = {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (userData: Omit<User, 'id'> & { password: string }) => Promise<boolean>;
   logout: () => void;
@@ -28,13 +30,24 @@ const mockUsers: (User & { password: string })[] = [
     email: "user@example.com",
     phone: "0123456789",
     address: "123 Đường ABC, Quận 1, TP.HCM",
-    password: "123456"
+    password: "123456",
+    role: "customer"
+  },
+  {
+    id: 2,
+    name: "Admin",
+    email: "admin@sweetdream.com",
+    phone: "0987654321",
+    address: "Cửa hàng SweetDream",
+    password: "admin123",
+    role: "admin"
   }
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check for saved user on component mount
   useEffect(() => {
@@ -49,18 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('sweetdream_user');
       }
     }
+    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Mock login - replace with actual API call
+      // Simple login - check hardcoded users
       const foundUser = mockUsers.find(u => u.email === email && u.password === password);
       
       if (foundUser) {
         const { password: _, ...userWithoutPassword } = foundUser;
         setUser(userWithoutPassword);
         setIsAuthenticated(true);
+        
+        // Save to localStorage
         localStorage.setItem('sweetdream_user', JSON.stringify(userWithoutPassword));
+        
+        // Also save to cookie for middleware
+        document.cookie = `sweetdream_user=${JSON.stringify(userWithoutPassword)}; path=/; max-age=604800`; // 7 days
+        
         return true;
       }
       
@@ -73,16 +93,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (userData: Omit<User, 'id'> & { password: string }): Promise<boolean> => {
     try {
-      // Check if user already exists
-      const existingUser = mockUsers.find(u => u.email === userData.email);
-      if (existingUser) {
+      // Check if user already exists in mock users
+      const existingMockUser = mockUsers.find(u => u.email === userData.email);
+      if (existingMockUser) {
         return false; // User already exists
       }
 
-      // Create new user
+      // Create customer in database via API
+      const { password, ...customerData } = userData;
+      
+      const response = await fetch('/api/proxy/customers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(customerData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to create customer:', error);
+        return false; // Email already exists in database or other error
+      }
+
+      const createdCustomer = await response.json();
+
+      // Add to mock users for authentication
       const newUser = {
         ...userData,
-        id: mockUsers.length + 1
+        id: createdCustomer.id, // Use the ID from database
       };
 
       mockUsers.push(newUser);
@@ -90,7 +129,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { password: _, ...userWithoutPassword } = newUser;
       setUser(userWithoutPassword);
       setIsAuthenticated(true);
+      
+      // Save to localStorage
       localStorage.setItem('sweetdream_user', JSON.stringify(userWithoutPassword));
+      
+      // Also save to cookie for middleware
+      document.cookie = `sweetdream_user=${JSON.stringify(userWithoutPassword)}; path=/; max-age=604800`; // 7 days
       
       return true;
     } catch (error) {
@@ -103,6 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('sweetdream_user');
+    
+    // Clear cookie
+    document.cookie = 'sweetdream_user=; path=/; max-age=0';
   };
 
   const updateProfile = (userData: Partial<User>) => {
@@ -123,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       isAuthenticated,
+      isLoading,
       login,
       register,
       logout,

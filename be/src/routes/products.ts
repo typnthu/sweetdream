@@ -169,13 +169,34 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Check if product has any orders
+    const orderItemsCount = await prisma.orderItem.count({
+      where: { productId: parseInt(id) }
+    });
+
+    if (orderItemsCount > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete product with existing orders',
+        message: `Không thể xóa sản phẩm này vì đã có ${orderItemsCount} đơn hàng liên quan. Bạn có thể ẩn sản phẩm thay vì xóa.`
+      });
+    }
+
     await prisma.product.delete({
       where: { id: parseInt(id) }
     });
 
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting product:', error);
+    
+    // Handle foreign key constraint error
+    if (error.code === 'P2003') {
+      return res.status(400).json({ 
+        error: 'Cannot delete product with existing orders',
+        message: 'Không thể xóa sản phẩm này vì đã có đơn hàng liên quan'
+      });
+    }
+    
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });

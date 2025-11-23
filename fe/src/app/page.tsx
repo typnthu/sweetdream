@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCategory } from "@/context/CategoryContext";
+//import { useCategory } from "@/context/CategoryContext";
 import { getProducts, type Product } from "@/lib/api";
 
 export default function Home() {
-  const { category } = useCategory();
+  //const { category } = useCategory();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,22 +35,22 @@ export default function Home() {
   const newProducts = products.slice(-4);   // 4 sản phẩm cuối
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div>
+      {/* Banner - Full Width, Clickable */}
+      <Link href="/about" className="block cursor-pointer group">
+        <div className="relative w-full md:h-[350px] overflow-hidden  shadow-[0_15px_15px_rgba(248,166,210,0.4)]">
+          <Image
+            src="/banner.png"
+            alt="Banner SweetDream - Click để tìm hiểu thêm"
+            fill
+            className="object-cover object-center transition-transform duration-500 "
+            priority
+          />
+          </div>
+      </Link>
 
-      {/* Banner */}
-      <div className="mb-10 relative w-full h-60 rounded-lg overflow-hidden shadow-lg">
-        <Image
-          src="/banner.webp" // bạn thêm ảnh banner vào public/
-          alt="Banner SweetDream"
-          fill
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-          <h1 className="text-3xl md:text-5xl text-white font-bold">
-            Chào mừng đến với SweetDream 🍰
-          </h1>
-        </div>
-      </div>
+      {/* Products Section */}
+      <div className="max-w-5xl mx-auto p-6">
 
       {/* Loading state */}
       {loading && (
@@ -69,10 +69,10 @@ export default function Home() {
       {/* Sản phẩm được mua nhiều */}
       {!loading && !error && (
         <section className="mb-10">
-          <h2 className="text-2xl font-bold mb-4 text-pink-600">Sản phẩm được mua nhiều</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+          <h2 className="text-2xl font-bold mb-4 text-pink-500">Sản phẩm được mua nhiều</h2>
+          <div className="grid sm:grid-cols-4 gap-6">
             {hotProducts.map((p) => (
-            <div key={p.id} className="border rounded-xl p-4 hover:shadow-lg">
+            <div key={p.id} className=" rounded-lg p-4 hover:shadow-[0_10px_15px_rgba(249,168,212,0.5)]">
               <Link href={`/product/${p.id}`}>
                 <Image
                   src={p.img}
@@ -81,8 +81,8 @@ export default function Home() {
                   height={240}
                   className="rounded-lg mb-3 object-cover"
                 />
-                <h3 className="font-semibold">{p.name}</h3>
-                <p className="text-pink-500 font-bold">
+                <h3 className="text-center">{p.name}</h3>
+                <p className="text-pink-500 text-center">
                   {p.sizes && p.sizes.length > 0 ? p.sizes[0].price.toLocaleString() : 'N/A'} VND
                 </p>
               </Link>
@@ -95,10 +95,10 @@ export default function Home() {
       {/* Sản phẩm mới ra mắt */}
       {!loading && !error && (
         <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-4 text-pink-600">Sản phẩm mới ra mắt</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+        <h2 className="text-2xl font-bold mb-4 text-pink-500">Sản phẩm mới ra mắt</h2>
+        <div className="grid sm:grid-cols-4 gap-6">
           {newProducts.map((p) => (
-            <div key={p.id} className="border rounded-xl p-4 hover:shadow-lg">
+            <div key={p.id} className=" rounded-lg p-4 hover:shadow-[0_10px_15px_rgba(249,168,212,0.5)]">
               <Link href={`/product/${p.id}`}>
                 <Image
                   src={p.img}
@@ -107,8 +107,8 @@ export default function Home() {
                   height={240}
                   className="rounded-lg mb-3 object-cover"
                 />
-                <h3 className="font-semibold">{p.name}</h3>
-                <p className="text-pink-500 font-bold">
+                <h3 className="text-center">{p.name}</h3>
+                <p className="text-pink-500 text-center">
                   {p.sizes && p.sizes.length > 0 ? p.sizes[0].price.toLocaleString() : 'N/A'} VND
                 </p>
               </Link>
@@ -117,7 +117,7 @@ export default function Home() {
           </div>
         </section>
       )}
-
+      </div>
     </div>
   );
 }

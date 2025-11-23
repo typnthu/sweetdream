@@ -7,10 +7,14 @@ build/
 .next/
 out/
 
-# Environment variables
+# Environment variables - KEEP LOCAL TEST FILES OUT OF GIT
 .env
 .env.local
 .env.*.local
+be/.env
+be/.env.local
+fe/.env
+fe/.env.local
 
 # IDE
 .vscode/
@@ -24,15 +28,17 @@ out/
 Thumbs.db
 desktop.ini
 
-# Terraform
+# Terraform - KEEP SENSITIVE FILES OUT OF GIT
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
+terraform/terraform.tfstate.*.backup
 terraform/terraform.tfvars
-terraform/backend.tf
+terraform/tfplan
 *.tfstate
 *.tfstate.*
+!terraform/backend.tf
 
 # AWS
 .aws/
@@ -57,7 +63,11 @@ coverage/
 prisma/migrations/
 
 # Docker
-.dockerignore
+docker-compose.override.yml
+
+# Local development scripts and test data
+be/export-products.js
+be/view-products.js
 
 # Misc
 *.bak

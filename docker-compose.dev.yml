@@ -1,0 +1,26 @@
+# Simplified version - runs only database, you run backend/frontend manually
+version: '3.8'
+
+services:
+  # PostgreSQL Database Only
+  postgres:
+    image: postgres:15-alpine
+    container_name: sweetdream-db-dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sweetdream
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev123
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d sweetdream"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+    driver: local

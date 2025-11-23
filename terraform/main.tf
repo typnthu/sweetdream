@@ -47,7 +47,7 @@ module "rds" {
   db_password           = var.db_password
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.ecs_security_group_id
+  ecs_security_group_id = module.vpc.rds_security_group_id
 }
 
 module "ecs_backend" {
@@ -68,7 +68,7 @@ module "ecs_backend" {
   service_discovery_arn      = module.service_discovery.backend_service_arn
   enable_service_discovery   = true
 
-  db_host     = module.rds.db_endpoint
+  db_host     = module.rds.db_address
   db_name     = var.db_name
   db_username = var.db_username
   db_password = var.db_password

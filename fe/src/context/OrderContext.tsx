@@ -127,7 +127,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   };
 
   const canCancelOrder = (status: OrderStatus) => {
-    return status === "PLACED";
+    // Can only cancel if status is PLACED or CONFIRMED (before PREPARING)
+    return status === "PLACED" || status === "CONFIRMED";
   };
 
   const addOrder = (orderData: Omit<Order, 'id' | 'orderNumber' | 'date' | 'canCancel'>) => {

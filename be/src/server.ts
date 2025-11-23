@@ -39,6 +39,63 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Admin endpoints for database operations (temporary - remove in production!)
+app.post('/api/admin/migrate', async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execPromise = util.promisify(exec);
+    
+    console.log('Running database schema push...');
+    // Use db push to create tables directly from schema
+    const { stdout, stderr } = await execPromise('npx prisma db push --accept-data-loss');
+    
+    console.log('Schema push output:', stdout);
+    if (stderr) console.error('Schema push stderr:', stderr);
+    
+    res.json({ 
+      success: true, 
+      message: 'Database schema created successfully',
+      output: stdout 
+    });
+  } catch (error: any) {
+    console.error('Schema push error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stderr: error.stderr 
+    });
+  }
+});
+
+app.post('/api/admin/seed', async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execPromise = util.promisify(exec);
+    
+    console.log('Seeding database...');
+    // Use the JavaScript version of seed file
+    const { stdout, stderr } = await execPromise('node prisma/seed.js');
+    
+    console.log('Seed output:', stdout);
+    if (stderr) console.error('Seed stderr:', stderr);
+    
+    res.json({ 
+      success: true, 
+      message: 'Database seeded successfully',
+      output: stdout 
+    });
+  } catch (error: any) {
+    console.error('Seed error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stderr: error.stderr 
+    });
+  }
+});
+
 // API Routes
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);

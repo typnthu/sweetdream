@@ -1,4 +1,4 @@
-name: Deploy Application
+name: Optimized Deploy (Smart Terraform + App)
 
 on:
   push:
@@ -9,249 +9,221 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_BACKEND_REPOSITORY: sweetdream-backend
-  ECR_FRONTEND_REPOSITORY: sweetdream-frontend
+  TF_VERSION: 1.6.0
   ECS_CLUSTER: sweetdream-cluster
-  ECS_BACKEND_SERVICE: sweetdream-service-backend
-  ECS_FRONTEND_SERVICE: sweetdream-service-frontend
-  ECS_BACKEND_TASK_DEFINITION: sweetdream-task-backend
-  ECS_FRONTEND_TASK_DEFINITION: sweetdream-task-frontend
 
 jobs:
-  build-and-push-backend:
-    name: Build & Push Backend
+  # Detect what changed
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.filter.outputs.terraform }}
+      application: ${{ steps.filter.outputs.application }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            terraform:
+              - 'terraform/**'
+            application:
+              - 'be/**'
+              - 'fe/**'
+              - 'order-service/**'
+              - 'user-service/**'
+              - '.github/workflows/deploy-optimized.yml'
+
+  # Deploy infrastructure ONLY if terraform files changed
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    needs: detect-changes
+    if: needs.detect-changes.outputs.terraform == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    defaults:
+      run:
+        working-directory: terraform
     outputs:
-      image: ${{ steps.build-backend-image.outputs.image }}
-    
+      alb_url: ${{ steps.outputs.outputs.alb_url }}
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
+      
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
+      
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Save Outputs
+        id: outputs
+        run: |
+          echo "alb_url=$(terraform output -raw alb_url)" >> $GITHUB_OUTPUT
+          echo "✅ Infrastructure deployed!" >> $GITHUB_STEP_SUMMARY
 
-      - name: Login to Amazon ECR
+  # Build and push Docker images (ONLY if application changed)
+  build-images:
+    name: Build & Push Images
+    needs: [detect-changes, deploy-infrastructure]
+    if: always() && needs.detect-changes.outputs.application == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Create ECR repository if not exists
+      
+      - name: Get ALB URL
+        id: get-alb
         run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_BACKEND_REPOSITORY }} || \
-          aws ecr create-repository \
-            --repository-name ${{ env.ECR_BACKEND_REPOSITORY }} \
-            --image-scanning-configuration scanOnPush=true \
-            --encryption-configuration encryptionType=AES256
-
-      - name: Build, tag, and push backend image
-        id: build-backend-image
+          ALB_URL=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' --output text)
+          echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
+      
+      - name: Build and Push Backend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cd be
-          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-  build-and-push-frontend:
-    name: Build & Push Frontend
-    runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    outputs:
-      image: ${{ steps.build-frontend-image.outputs.image }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Create ECR repository if not exists
-        run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_FRONTEND_REPOSITORY }} || \
-          aws ecr create-repository \
-            --repository-name ${{ env.ECR_FRONTEND_REPOSITORY }} \
-            --image-scanning-configuration scanOnPush=true \
-            --encryption-configuration encryptionType=AES256
-
-      - name: Build, tag, and push frontend image
-        id: build-frontend-image
+          docker build -t $ECR_REGISTRY/sweetdream-backend:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/sweetdream-backend:$IMAGE_TAG $ECR_REGISTRY/sweetdream-backend:latest
+          docker push $ECR_REGISTRY/sweetdream-backend:$IMAGE_TAG
+          docker push $ECR_REGISTRY/sweetdream-backend:latest
+      
+      - name: Build and Push Frontend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
-          NEXT_PUBLIC_API_URL: ${{ secrets.BACKEND_API_URL }}
+          NEXT_PUBLIC_API_URL: http://${{ steps.get-alb.outputs.alb_url }}
         run: |
           cd fe
-          docker build \
-            --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-            -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          docker build --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL -t $ECR_REGISTRY/sweetdream-frontend:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/sweetdream-frontend:$IMAGE_TAG $ECR_REGISTRY/sweetdream-frontend:latest
+          docker push $ECR_REGISTRY/sweetdream-frontend:$IMAGE_TAG
+          docker push $ECR_REGISTRY/sweetdream-frontend:latest
+      
+      - name: Build and Push Order Service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd order-service
+          docker build -t $ECR_REGISTRY/sweetdream-order-service:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/sweetdream-order-service:$IMAGE_TAG $ECR_REGISTRY/sweetdream-order-service:latest
+          docker push $ECR_REGISTRY/sweetdream-order-service:$IMAGE_TAG
+          docker push $ECR_REGISTRY/sweetdream-order-service:latest
+      
+      - name: Build and Push User Service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd user-service
+          docker build -t $ECR_REGISTRY/sweetdream-user-service:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/sweetdream-user-service:$IMAGE_TAG $ECR_REGISTRY/sweetdream-user-service:latest
+          docker push $ECR_REGISTRY/sweetdream-user-service:$IMAGE_TAG
+          docker push $ECR_REGISTRY/sweetdream-user-service:latest
 
-  deploy-backend:
-    name: Deploy Backend to ECS
+  # Deploy to ECS (ONLY if application changed)
+  deploy-application:
+    name: Deploy to ECS
+    needs: [detect-changes, build-images]
+    if: always() && needs.detect-changes.outputs.application == 'true'
     runs-on: ubuntu-latest
-    needs: build-and-push-backend
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download backend task definition
+      
+      - name: Force new deployment for all services
         run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_BACKEND_TASK_DEFINITION }} \
-            --query taskDefinition > backend-task-definition.json
-
-      - name: Fill in the new image ID in the backend task definition
-        id: backend-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: backend-task-definition.json
-          container-name: sweetdream-backend
-          image: ${{ needs.build-and-push-backend.outputs.image }}
-
-      - name: Deploy backend to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.backend-task-def.outputs.task-definition }}
-          service: ${{ env.ECS_BACKEND_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-  deploy-frontend:
-    name: Deploy Frontend to ECS
-    runs-on: ubuntu-latest
-    needs: [build-and-push-frontend, deploy-backend]
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download frontend task definition
+          echo "🚀 Deploying all services..."
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-backend --force-new-deployment
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-frontend --force-new-deployment
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-order-service --force-new-deployment
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service sweetdream-user-service --force-new-deployment
+      
+      - name: Wait for services to stabilize
         run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_FRONTEND_TASK_DEFINITION }} \
-            --query taskDefinition > frontend-task-definition.json
+          echo "⏳ Waiting for services to stabilize..."
+          aws ecs wait services-stable --cluster ${{ env.ECS_CLUSTER }} --services sweetdream-backend sweetdream-frontend sweetdream-order-service sweetdream-user-service
+          echo "✅ All services are stable!"
 
-      - name: Fill in the new image ID in the frontend task definition
-        id: frontend-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: frontend-task-definition.json
-          container-name: sweetdream-frontend
-          image: ${{ needs.build-and-push-frontend.outputs.image }}
-
-      - name: Deploy frontend to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.frontend-task-def.outputs.task-definition }}
-          service: ${{ env.ECS_FRONTEND_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-  run-migrations:
-    name: Run Database Migrations
-    runs-on: ubuntu-latest
-    needs: deploy-backend
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get ECS task ARN
-        id: get-task
-        run: |
-          TASK_ARN=$(aws ecs list-tasks \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service-name ${{ env.ECS_BACKEND_SERVICE }} \
-            --desired-status RUNNING \
-            --query 'taskArns[0]' \
-            --output text)
-          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
-
-      - name: Run migrations via ECS Exec
-        run: |
-          aws ecs execute-command \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --task ${{ steps.get-task.outputs.task_arn }} \
-            --container sweetdream-backend \
-            --interactive \
-            --command "npm run migrate"
-        continue-on-error: true
-
+  # Summary
   deployment-summary:
     name: Deployment Summary
-    runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, run-migrations]
+    needs: [detect-changes, deploy-infrastructure, deploy-application]
     if: always()
-    
+    runs-on: ubuntu-latest
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get ALB URL
-        id: get-alb
+      
+      - name: Get deployment info
+        id: info
         run: |
-          cd terraform
-          ALB_URL=$(terraform output -raw alb_url 2>/dev/null || echo "Not available")
+          ALB_URL=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' --output text)
           echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
-        continue-on-error: true
-
-      - name: Create Summary
+      
+      - name: Create summary
         run: |
-          echo "## Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Environment" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 What Was Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Terraform Changed**: ${{ needs.detect-changes.outputs.terraform }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Application Changed**: ${{ needs.detect-changes.outputs.application }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Results" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.detect-changes.outputs.terraform }}" == "true" ]; then
+            echo "- ✅ Infrastructure: ${{ needs.deploy-infrastructure.result }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ Infrastructure: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ needs.detect-changes.outputs.application }}" == "true" ]; then
+            echo "- ✅ Application: ${{ needs.deploy-application.result }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ Application: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Access" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: http://${{ steps.info.outputs.alb_url }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment**: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Development' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Services" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backend**: ${{ needs.deploy-backend.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Frontend**: ${{ needs.deploy-frontend.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Migrations**: ${{ needs.run-migrations.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Access" >> $GITHUB_STEP_SUMMARY
-          echo "- **Application URL**: Check Terraform outputs or AWS Console" >> $GITHUB_STEP_SUMMARY

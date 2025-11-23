@@ -214,13 +214,10 @@ export async function getCustomerByEmail(email: string): Promise<Customer> {
 // ============================================
 
 /**
- * Format price to Vietnamese currency
+ * Format price to Vietnamese currency (15.000đ format)
  */
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-  }).format(price);
+  return price.toLocaleString('vi-VN') + 'đ';
 }
 
 /**

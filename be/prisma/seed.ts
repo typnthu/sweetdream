@@ -92,7 +92,7 @@ async function seed() {
         // img field from JSON already contains full S3 URL
         const product = await prisma.product.create({
           data: {
-            id: id,
+            // Don't set id - let database auto-generate it
             name: productData.name,
             description: productData.description,
             img: productData.img, // Use S3 URL from JSON file
