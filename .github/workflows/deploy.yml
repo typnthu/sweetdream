@@ -211,31 +211,16 @@ jobs:
             fi
           done
       
-      - name: Wait for services to stabilize
+      - name: Trigger deployment (no wait)
         run: |
-          echo "⏳ Waiting for services to stabilize..."
-          
-          services=(
-            "sweetdream-service-backend"
-            "sweetdream-service-frontend"
-            "sweetdream-service-user-service"
-            "sweetdream-service-order-service"
-          )
-          
-          # Only wait for services that exist
-          existing_services=()
-          for service in "${services[@]}"; do
-            if aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services $service --query 'services[0].serviceName' --output text 2>/dev/null | grep -q "$service"; then
-              existing_services+=("$service")
-            fi
-          done
-          
-          if [ ${#existing_services[@]} -gt 0 ]; then
-            aws ecs wait services-stable --cluster ${{ env.ECS_CLUSTER }} --services "${existing_services[@]}"
-            echo "✅ All services are stable!"
-          else
-            echo "⚠️  No existing services found to wait for"
-          fi
+          echo "✅ Deployment triggered for all services!"
+          echo "⚠️  Not waiting for stability - check ECS console for status"
+          echo ""
+          echo "Services will update in background:"
+          echo "  - sweetdream-service-backend"
+          echo "  - sweetdream-service-frontend"
+          echo "  - sweetdream-service-user-service"
+          echo "  - sweetdream-service-order-service"
 
   # Summary
   deployment-summary:
