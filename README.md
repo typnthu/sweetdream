@@ -293,7 +293,7 @@ aws configure
 
 ```bash
 # Run the setup script
-.\scripts\create-ecr-repos.ps1
+.\scripts\set-up.ps1
 
 # Or manually
 aws ecr create-repository --repository-name sweetdream-backend --region us-east-1
@@ -506,7 +506,7 @@ sweetdream/
 │       └── pr-checks.yml        # PR validation
 │
 ├── scripts/
-│   └── create-ecr-repos.ps1     # ECR setup script
+│   └── set-up.ps1               # ECR setup script
 │
 ├── docker-compose.dev.yml       # Local database
 ├── check-services.ps1           # Health check script
@@ -740,7 +740,7 @@ aws logs tail /ecs/sweetdream-sweetdream-service-backend --follow
 **ECR repository not found:**
 ```bash
 # Create repositories
-.\scripts\create-ecr-repos.ps1
+.\scripts\set-up.ps1
 ```
 
 **Database connection failed:**
