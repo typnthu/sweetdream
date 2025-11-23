@@ -44,3 +44,4 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "1. Build and push Docker images" -ForegroundColor White
 Write-Host "2. Deploy infrastructure with Terraform" -ForegroundColor White
 Write-Host "3. Update ECS services with new images" -ForegroundColor White
+Write-Host ""
