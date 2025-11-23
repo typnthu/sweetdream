@@ -1,7 +1,7 @@
 # Create ECR Repositories for SweetDream Microservices
 # Run this ONCE before deploying
 
-Write-Host "🐳 Creating ECR Repositories..." -ForegroundColor Cyan
+Write-Host "Creating ECR Repositories..." -ForegroundColor Cyan
 Write-Host ""
 
 $repos = @(
@@ -15,25 +15,21 @@ foreach ($repo in $repos) {
     Write-Host "Creating repository: $repo" -ForegroundColor Yellow
     
     # Try to create the repository
-    $result = aws ecr create-repository `
-        --repository-name $repo `
-        --image-scanning-configuration scanOnPush=true `
-        --encryption-configuration encryptionType=AES256 `
-        --region us-east-1 2>&1
+    $result = aws ecr create-repository --repository-name $repo --image-scanning-configuration scanOnPush=true --encryption-configuration encryptionType=AES256 --region us-east-1 2>&1
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  ✅ Created: $repo" -ForegroundColor Green
+        Write-Host "  Created: $repo" -ForegroundColor Green
     } elseif ($result -like "*RepositoryAlreadyExistsException*") {
-        Write-Host "  ℹ️  Already exists: $repo" -ForegroundColor Blue
+        Write-Host "  Already exists: $repo" -ForegroundColor Blue
     } else {
-        Write-Host "  ❌ Error creating $repo" -ForegroundColor Red
+        Write-Host "  Error creating $repo" -ForegroundColor Red
         Write-Host "  $result" -ForegroundColor Red
     }
 }
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "✅ ECR Setup Complete!" -ForegroundColor Green
+Write-Host "ECR Setup Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Repositories created:" -ForegroundColor Yellow
