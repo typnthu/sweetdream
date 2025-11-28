@@ -43,6 +43,8 @@ jobs:
       
       - name: Check and Import Existing Resources
         continue-on-error: true
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         run: |
           echo "Checking for existing resources..."
           
@@ -57,7 +59,7 @@ jobs:
               # Check if already in state
               if ! terraform state show "$tf_address" &>/dev/null; then
                 echo "  Importing bucket into state..."
-                terraform import "$tf_address" "$bucket_name" 2>/dev/null || echo "  Import failed or already exists"
+                terraform import -input=false "$tf_address" "$bucket_name" 2>/dev/null || echo "  Import failed or already exists"
               else
                 echo "  Already in state"
               fi
@@ -66,7 +68,7 @@ jobs:
               local versioning_address="${tf_address/aws_s3_bucket.analytics/aws_s3_bucket_versioning.analytics}"
               if ! terraform state show "$versioning_address" &>/dev/null; then
                 echo "  Importing versioning..."
-                terraform import "$versioning_address" "$bucket_name" 2>/dev/null || echo "  Versioning import failed"
+                terraform import -input=false "$versioning_address" "$bucket_name" 2>/dev/null || echo "  Versioning import failed"
               fi
             else
               echo "✗ Bucket not found: $bucket_name (will be created)"
