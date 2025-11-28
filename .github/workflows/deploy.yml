@@ -39,6 +39,7 @@ jobs:
           terraform_version: 1.6.0
       
       - name: Remove Remote State (Fresh Start)
+        if: contains(github.event.head_commit.message, '[fresh-state]')
         run: |
           echo "⚠️ Removing remote Terraform state for fresh deployment..."
           aws s3 rm s3://sweetdream-terraform-state-409964509537/terraform.tfstate || true
@@ -53,38 +54,35 @@ jobs:
       - name: Terraform Init
         run: terraform init -reconfigure
       
-      - name: Import Existing S3 Buckets
+      - name: Import Existing Resources
         continue-on-error: true
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         run: |
-          echo "Checking for existing S3 buckets to import..."
+          echo "Importing existing AWS resources into fresh state..."
           
-          # Import backend analytics bucket if it exists and not in state
-          if aws s3api head-bucket --bucket "sweetdream-analytics-backend-production" 2>/dev/null; then
-            if ! terraform state show 'module.backend_analytics[0].aws_s3_bucket.analytics' &>/dev/null; then
-              echo "Importing backend analytics bucket..."
-              terraform import -input=false 'module.backend_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-backend-production || true
-            fi
-            if ! terraform state show 'module.backend_analytics[0].aws_s3_bucket_versioning.analytics' &>/dev/null; then
-              echo "Importing backend bucket versioning..."
-              terraform import -input=false 'module.backend_analytics[0].aws_s3_bucket_versioning.analytics' sweetdream-analytics-backend-production || true
-            fi
-          fi
+          # Import VPC and networking
+          terraform import 'module.vpc.aws_vpc.main' $(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=sweetdream-vpc" --query 'Vpcs[0].VpcId' --output text) || true
           
-          # Import order analytics bucket if it exists and not in state
-          if aws s3api head-bucket --bucket "sweetdream-analytics-order-production" 2>/dev/null; then
-            if ! terraform state show 'module.order_analytics[0].aws_s3_bucket.analytics' &>/dev/null; then
-              echo "Importing order analytics bucket..."
-              terraform import -input=false 'module.order_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-order-production || true
-            fi
-            if ! terraform state show 'module.order_analytics[0].aws_s3_bucket_versioning.analytics' &>/dev/null; then
-              echo "Importing order bucket versioning..."
-              terraform import -input=false 'module.order_analytics[0].aws_s3_bucket_versioning.analytics' sweetdream-analytics-order-production || true
-            fi
-          fi
+          # Import ALB
+          terraform import 'module.alb.aws_lb.main' $(aws elbv2 describe-load-balancers --names sweetdream-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text) || true
+          terraform import 'module.alb.aws_lb_target_group.backend' $(aws elbv2 describe-target-groups --names sweetdream-backend-tg --query 'TargetGroups[0].TargetGroupArn' --output text) || true
+          terraform import 'module.alb.aws_lb_target_group.frontend' $(aws elbv2 describe-target-groups --names sweetdream-frontend-tg --query 'TargetGroups[0].TargetGroupArn' --output text) || true
           
-          echo "✓ Import check completed" >> $GITHUB_STEP_SUMMARY
+          # Import IAM roles
+          terraform import 'module.iam.aws_iam_role.ecs_execution' sweetdream-ecs-execution-role || true
+          terraform import 'module.iam.aws_iam_role.ecs_task' sweetdream-ecs-task-role || true
+          
+          # Import S3 buckets
+          terraform import 'module.s3.aws_s3_bucket.logs' sweetdream-logs-data || true
+          terraform import 'module.backend_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-backend-production || true
+          terraform import 'module.order_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-order-production || true
+          
+          # Import RDS
+          terraform import 'module.rds.aws_db_subnet_group.main' sweetdream-db-subnet-group || true
+          
+          # Import Secrets Manager
+          terraform import 'module.secrets_manager.aws_secretsmanager_secret.db_credentials' sweetdream-db-secret || true
+          
+          echo "✓ Import completed" >> $GITHUB_STEP_SUMMARY
       
       - name: Terraform Plan
         run: |
