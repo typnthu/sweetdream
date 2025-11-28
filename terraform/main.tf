@@ -332,7 +332,7 @@ module "bastion" {
 
   name_prefix           = var.service_name
   vpc_id                = module.vpc.vpc_id
-  subnet_id             = module.vpc.private_subnets[0]
+  subnet_id             = module.vpc.private_subnets[0] # Private subnet - access via SSM
   rds_security_group_id = module.vpc.rds_security_group_id
   instance_type         = "t3.micro"
 
@@ -342,7 +342,7 @@ module "bastion" {
   db_username = var.db_username
 
   # Optional: Create EIP for consistent public IP
-  create_eip = false
+  create_eip = false # No EIP needed with SSM
 
   # Optional: SSH key pair (if you want SSH access)
   create_key_pair = false

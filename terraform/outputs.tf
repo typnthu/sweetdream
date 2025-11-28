@@ -125,6 +125,11 @@ output "bastion_instance_id" {
   value       = var.enable_bastion ? module.bastion[0].instance_id : null
 }
 
+output "bastion_public_ip" {
+  description = "Bastion host public IP address"
+  value       = var.enable_bastion ? module.bastion[0].instance_public_ip : null
+}
+
 output "bastion_connect_command" {
   description = "Command to connect to bastion via SSM Session Manager"
   value       = var.enable_bastion ? module.bastion[0].connect_command : null

@@ -19,19 +19,12 @@ data "aws_ami" "amazon_linux_2023" {
 # Security Group for Bastion
 resource "aws_security_group" "bastion" {
   name        = "${var.name_prefix}-bastion-sg"
-  description = "Security group for bastion host"
+  description = "Security group for bastion host (SSM access only)"
   vpc_id      = var.vpc_id
 
-  # Allow SSH from anywhere (you can restrict this to your IP)
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "SSH access"
-  }
-
-  # Allow all outbound traffic
+  # No ingress rules needed - SSM uses outbound HTTPS
+  
+  # Allow all outbound traffic (needed for SSM and RDS access)
   egress {
     from_port   = 0
     to_port     = 0

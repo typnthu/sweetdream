@@ -11,7 +11,7 @@ output "instance_private_ip" {
 }
 
 output "instance_public_ip" {
-  description = "Bastion public IP address (if EIP created)"
+  description = "Bastion public IP address (null when using SSM)"
   value       = var.create_eip ? aws_eip.bastion[0].public_ip : null
 }
 
