@@ -101,7 +101,8 @@ resource "aws_s3_bucket_policy" "analytics" {
 
 # IAM Role for Lambda
 resource "aws_iam_role" "export_lambda" {
-  name = "${var.service_name}-export-lambda-role"
+  count = var.enable_lambda_export ? 1 : 0
+  name  = "${var.service_name}-export-lambda-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -121,8 +122,9 @@ resource "aws_iam_role" "export_lambda" {
 
 # IAM Policy for Lambda
 resource "aws_iam_role_policy" "export_lambda" {
-  name = "${var.service_name}-export-lambda-policy"
-  role = aws_iam_role.export_lambda.id
+  count = var.enable_lambda_export ? 1 : 0
+  name  = "${var.service_name}-export-lambda-policy"
+  role  = aws_iam_role.export_lambda[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -164,6 +166,7 @@ resource "aws_iam_role_policy" "export_lambda" {
 
 # Create zip file for user action export Lambda
 data "archive_file" "user_action_lambda_zip" {
+  count       = var.enable_lambda_export ? 1 : 0
   type        = "zip"
   source_file = "${path.module}/lambda_user_action_export.py"
   output_path = "${path.module}/lambda_user_action_export.zip"
@@ -171,14 +174,15 @@ data "archive_file" "user_action_lambda_zip" {
 
 # Lambda Function for user action log export
 resource "aws_lambda_function" "export_logs" {
-  filename         = data.archive_file.user_action_lambda_zip.output_path
+  count            = var.enable_lambda_export ? 1 : 0
+  filename         = data.archive_file.user_action_lambda_zip[0].output_path
   function_name    = "${var.service_name}-export-logs"
-  role             = aws_iam_role.export_lambda.arn
+  role             = aws_iam_role.export_lambda[0].arn
   handler          = "lambda_user_action_export.handler"
   runtime          = "python3.11"
   timeout          = 900 # 15 minutes for CloudWatch Insights queries
   memory_size      = 256 # More memory for processing
-  source_code_hash = data.archive_file.user_action_lambda_zip.output_base64sha256
+  source_code_hash = data.archive_file.user_action_lambda_zip[0].output_base64sha256
 
   environment {
     variables = {
@@ -194,7 +198,8 @@ resource "aws_lambda_function" "export_logs" {
 
 # CloudWatch Log Group for Lambda
 resource "aws_cloudwatch_log_group" "export_lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.export_logs.function_name}"
+  count             = var.enable_lambda_export ? 1 : 0
+  name              = "/aws/lambda/${aws_lambda_function.export_logs[0].function_name}"
   retention_in_days = 7
 
   tags = var.tags
@@ -202,6 +207,7 @@ resource "aws_cloudwatch_log_group" "export_lambda" {
 
 # EventBridge Rule - Daily at 0:00 AM Vietnam time (17:00 UTC previous day)
 resource "aws_cloudwatch_event_rule" "daily_export" {
+  count               = var.enable_lambda_export ? 1 : 0
   name                = "${var.service_name}-daily-export"
   description         = "Trigger daily user action log export to S3 at 0:00 AM Vietnam time"
   schedule_expression = "cron(0 17 * * ? *)"
@@ -211,18 +217,20 @@ resource "aws_cloudwatch_event_rule" "daily_export" {
 
 # EventBridge Target
 resource "aws_cloudwatch_event_target" "export_lambda" {
-  rule      = aws_cloudwatch_event_rule.daily_export.name
+  count     = var.enable_lambda_export ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.daily_export[0].name
   target_id = "ExportLambda"
-  arn       = aws_lambda_function.export_logs.arn
+  arn       = aws_lambda_function.export_logs[0].arn
 }
 
 # Lambda Permission for EventBridge
 resource "aws_lambda_permission" "allow_eventbridge" {
+  count         = var.enable_lambda_export ? 1 : 0
   statement_id  = "AllowExecutionFromEventBridge"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.export_logs.function_name
+  function_name = aws_lambda_function.export_logs[0].function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.daily_export.arn
+  source_arn    = aws_cloudwatch_event_rule.daily_export[0].arn
 }
 
 # ===== CloudWatch Insights Queries for Analysis =====

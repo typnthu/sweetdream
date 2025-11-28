@@ -134,6 +134,7 @@ module "backend_analytics" {
   log_group_name        = "/ecs/sweetdream-${var.service_name}-backend"
   analytics_bucket_name = "${var.analytics_bucket_prefix}-backend-${var.environment}"
   export_format         = "json" # json or csv
+  enable_lambda_export  = false  # Disable Lambda - keep only S3 + CloudWatch Insights
 
   # Filter only user action logs (optional - remove to export all logs)
   filter_pattern = ""
@@ -315,6 +316,7 @@ module "order_analytics" {
   log_group_name        = "/ecs/sweetdream-${var.service_name}-order-service"
   analytics_bucket_name = "${var.analytics_bucket_prefix}-order-${var.environment}"
   export_format         = "json" # json or csv
+  enable_lambda_export  = false  # Disable Lambda - keep only S3 + CloudWatch Insights
 
   # Filter only user action logs (optional)
   filter_pattern = ""

@@ -42,3 +42,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_lambda_export" {
+  description = "Enable Lambda function for automated log export to S3"
+  type        = bool
+  default     = false
+}
