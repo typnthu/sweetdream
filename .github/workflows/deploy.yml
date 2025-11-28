@@ -47,27 +47,15 @@ jobs:
           aws s3 rm s3://sweetdream-terraform-state-409964509537/terraform.tfstate || true
           echo "State removed - will create fresh state"
       
-      - name: Clear Stale State Lock
+      - name: Clear Stale State Lock and Digest
         continue-on-error: true
         run: |
-          echo "Checking for stale state locks..."
-          # Get lock info from DynamoDB
-          LOCK_ID=$(aws dynamodb get-item \
+          echo "Clearing stale locks and digests..."
+          # Delete the entire lock/digest item from DynamoDB
+          aws dynamodb delete-item \
             --table-name sweetdream-terraform-locks \
-            --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' \
-            --query 'Item.LockID.S' \
-            --output text 2>/dev/null || echo "")
-          
-          if [ ! -z "$LOCK_ID" ] && [ "$LOCK_ID" != "None" ]; then
-            echo "Found stale lock, attempting to clear..."
-            # Delete the lock item from DynamoDB
-            aws dynamodb delete-item \
-              --table-name sweetdream-terraform-locks \
-              --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' 2>/dev/null || true
-            echo "✓ Lock cleared"
-          else
-            echo "No stale locks found"
-          fi
+            --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' 2>/dev/null || true
+          echo "✓ Lock and digest cleared"
       
       - name: Import Existing S3 Buckets
         continue-on-error: true
@@ -105,7 +93,7 @@ jobs:
       - name: Terraform Plan
         run: |
           echo "Running Terraform plan..."
-          terraform plan -var-file="terraform.tfvars" -var="db_password=${{ secrets.DB_PASSWORD }}" -out=tfplan
+          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}" -out=tfplan
           
           echo ""
           echo "Plan summary:"
