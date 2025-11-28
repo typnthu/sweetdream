@@ -49,6 +49,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.terraform == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Auto-cancel after 30 minutes
     environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     defaults:
       run:
