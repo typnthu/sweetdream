@@ -42,7 +42,6 @@ jobs:
         run: terraform init
       
       - name: Remove Remote State (Fresh Start)
-        if: github.event.inputs.destroy_first == 'true' || contains(github.event.head_commit.message, '[fresh-state]')
         run: |
           echo "⚠️ Removing remote Terraform state for fresh deployment..."
           aws s3 rm s3://sweetdream-terraform-state-409964509537/terraform.tfstate || true
@@ -106,7 +105,7 @@ jobs:
       - name: Terraform Plan
         run: |
           echo "Running Terraform plan..."
-          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}" -out=tfplan
+          terraform plan -var-file="terraform.tfvars" -var="db_password=${{ secrets.DB_PASSWORD }}" -out=tfplan
           
           echo ""
           echo "Plan summary:"
