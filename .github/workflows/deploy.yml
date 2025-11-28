@@ -19,8 +19,6 @@ jobs:
   # Deploy everything
   deploy-infrastructure:
     name: Deploy Infrastructure
-    needs: [destroy]
-    if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
@@ -45,7 +43,7 @@ jobs:
           terraform init
           terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
           terraform apply -auto-approve tfplan
-          echo "✅ Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
+          echo "Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
 
   # Build and deploy all services
   deploy-services:
@@ -79,28 +77,28 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           NEXT_PUBLIC_API_URL: http://${{ steps.alb.outputs.url }}
         run: |
-          echo "🐳 Building all Docker images..."
+          echo "Building all Docker images..."
           
           # Backend
           docker build -t $ECR_REGISTRY/sweetdream-backend:latest ./be
           docker push $ECR_REGISTRY/sweetdream-backend:latest
-          echo "✅ Backend pushed"
+          echo "Backend pushed"
           
           # Frontend
           docker build --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
             -t $ECR_REGISTRY/sweetdream-frontend:latest ./fe
           docker push $ECR_REGISTRY/sweetdream-frontend:latest
-          echo "✅ Frontend pushed"
+          echo "Frontend pushed"
           
           # Order Service
           docker build -t $ECR_REGISTRY/sweetdream-order-service:latest ./order-service
           docker push $ECR_REGISTRY/sweetdream-order-service:latest
-          echo "✅ Order Service pushed"
+          echo "Order Service pushed"
           
           # User Service
           docker build -t $ECR_REGISTRY/sweetdream-user-service:latest ./user-service
           docker push $ECR_REGISTRY/sweetdream-user-service:latest
-          echo "✅ User Service pushed"
+          echo "User Service pushed"
       
       - name: Deploy All Services to ECS
         run: |
@@ -122,7 +120,7 @@ jobs:
               --no-cli-pager || echo "Service $service not ready yet"
           done
           
-          echo "✅ All services deployed" >> $GITHUB_STEP_SUMMARY
+          echo "All services deployed" >> $GITHUB_STEP_SUMMARY
 
   # Summary
   summary:
