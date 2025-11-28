@@ -41,6 +41,13 @@ jobs:
       - name: Terraform Init
         run: terraform init
       
+      - name: Remove Remote State (Fresh Start)
+        if: github.event.inputs.destroy_first == 'true' || contains(github.event.head_commit.message, '[fresh-state]')
+        run: |
+          echo "⚠️ Removing remote Terraform state for fresh deployment..."
+          aws s3 rm s3://sweetdream-terraform-state-409964509537/terraform.tfstate || true
+          echo "State removed - will create fresh state"
+      
       - name: Clear Stale State Lock
         continue-on-error: true
         run: |
