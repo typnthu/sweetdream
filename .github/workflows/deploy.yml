@@ -43,13 +43,13 @@ jobs:
             user-service:
               - 'user-service/**'
 
-  # Deploy infrastructure (MANUAL APPROVAL REQUIRED)
+  # Deploy infrastructure
   infrastructure:
     name: Infrastructure
     needs: changes
-    if: needs.changes.outputs.terraform == 'true' && github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.terraform == 'true'
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     defaults:
       run:
         working-directory: terraform
@@ -66,23 +66,23 @@ jobs:
         with:
           terraform_version: 1.6.0
       
-      - name: Terraform Plan Only
+      - name: Terraform Apply
         run: |
           terraform init
-          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}"
-          echo "⚠️ Terraform changes detected but NOT applied automatically" >> $GITHUB_STEP_SUMMARY
-          echo "Run terraform apply manually to deploy infrastructure changes" >> $GITHUB_STEP_SUMMARY
+          terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
+          terraform apply -auto-approve tfplan
+          echo "✅ Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
 
   # Build & deploy services in parallel
   deploy-backend:
     name: Backend
-    needs: [changes]
+    needs: [changes, infrastructure]
     if: |
       always() && 
       !cancelled() &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.force == 'true')
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     steps:
       - uses: actions/checkout@v4
       
@@ -112,13 +112,13 @@ jobs:
 
   deploy-frontend:
     name: Frontend
-    needs: [changes]
+    needs: [changes, infrastructure]
     if: |
       always() && 
       !cancelled() &&
       (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.force == 'true')
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     steps:
       - uses: actions/checkout@v4
       
@@ -160,13 +160,13 @@ jobs:
 
   deploy-order-service:
     name: Order Service
-    needs: [changes]
+    needs: [changes, infrastructure]
     if: |
       always() && 
       !cancelled() &&
       (needs.changes.outputs.order-service == 'true' || needs.changes.outputs.force == 'true')
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     steps:
       - uses: actions/checkout@v4
       
@@ -196,13 +196,13 @@ jobs:
 
   deploy-user-service:
     name: User Service
-    needs: [changes]
+    needs: [changes, infrastructure]
     if: |
       always() && 
       !cancelled() &&
       (needs.changes.outputs.user-service == 'true' || needs.changes.outputs.force == 'true')
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     steps:
       - uses: actions/checkout@v4
       
