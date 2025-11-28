@@ -162,7 +162,7 @@ resource "aws_security_group" "ecs" {
     description = "Backend port from VPC"
   }
 
-    ingress {
+  ingress {
     from_port   = 3002
     to_port     = 3002
     protocol    = "tcp"
@@ -170,7 +170,7 @@ resource "aws_security_group" "ecs" {
     description = "Backend port from VPC"
   }
 
-    ingress {
+  ingress {
     from_port   = 3003
     to_port     = 3003
     protocol    = "tcp"

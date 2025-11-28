@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, master, dev]  # Support both main and master
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -43,11 +43,11 @@ jobs:
             user-service:
               - 'user-service/**'
 
-  # Deploy infrastructure
+  # Deploy infrastructure (MANUAL APPROVAL REQUIRED)
   infrastructure:
     name: Infrastructure
     needs: changes
-    if: needs.changes.outputs.terraform == 'true'
+    if: needs.changes.outputs.terraform == 'true' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     defaults:
@@ -66,17 +66,17 @@ jobs:
         with:
           terraform_version: 1.6.0
       
-      - name: Deploy
+      - name: Terraform Plan Only
         run: |
           terraform init
-          terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
-          terraform apply -auto-approve tfplan
-          echo "✅ Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
+          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}"
+          echo "⚠️ Terraform changes detected but NOT applied automatically" >> $GITHUB_STEP_SUMMARY
+          echo "Run terraform apply manually to deploy infrastructure changes" >> $GITHUB_STEP_SUMMARY
 
   # Build & deploy services in parallel
   deploy-backend:
     name: Backend
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&
@@ -112,7 +112,7 @@ jobs:
 
   deploy-frontend:
     name: Frontend
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&
@@ -160,7 +160,7 @@ jobs:
 
   deploy-order-service:
     name: Order Service
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&
@@ -196,7 +196,7 @@ jobs:
 
   deploy-user-service:
     name: User Service
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&

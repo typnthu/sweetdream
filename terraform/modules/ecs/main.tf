@@ -2,9 +2,9 @@
 module "cloudwatch_logs" {
   source = "../cloudwatch-logs"
 
-  log_group_name          = "/ecs/sweetdream-${var.service_name}"
-  service_name            = var.service_name
-  retention_days          = var.log_retention_days
+  log_group_name           = "/ecs/sweetdream-${var.service_name}"
+  service_name             = var.service_name
+  retention_days           = var.log_retention_days
   enable_analytics_queries = var.enable_analytics_queries
 
   tags = {
@@ -23,6 +23,14 @@ resource "aws_ecs_task_definition" "app" {
   network_mode             = "awsvpc"
   cpu                      = tostring(var.task_cpu)
   memory                   = tostring(var.task_memory)
+
+  # Prevent unnecessary recreation when container image changes
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes = [
+      container_definitions
+    ]
+  }
 
   container_definitions = jsonencode([{
     name      = var.container_name

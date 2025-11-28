@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, master, dev]  # Support both main and master
   pull_request:
-    branches: [main, dev]
+    branches: [main, master, dev]
 
 env:
   NODE_VERSION: '20'

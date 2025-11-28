@@ -24,7 +24,7 @@ variable "filter_pattern" {
 variable "export_schedule" {
   description = "Schedule expression for daily export (cron or rate)"
   type        = string
-  default     = "cron(0 17 * * ? *)"  # Daily at 0:00 AM Vietnam time (17:00 UTC)
+  default     = "cron(0 17 * * ? *)" # Daily at 0:00 AM Vietnam time (17:00 UTC)
 }
 
 variable "export_format" {

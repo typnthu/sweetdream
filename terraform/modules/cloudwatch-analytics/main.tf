@@ -168,11 +168,11 @@ data "archive_file" "user_action_lambda_zip" {
 resource "aws_lambda_function" "export_logs" {
   filename         = data.archive_file.user_action_lambda_zip.output_path
   function_name    = "${var.service_name}-export-logs"
-  role            = aws_iam_role.export_lambda.arn
-  handler         = "lambda_user_action_export.handler"
-  runtime         = "python3.11"
-  timeout         = 900  # 15 minutes for CloudWatch Insights queries
-  memory_size     = 256  # More memory for processing
+  role             = aws_iam_role.export_lambda.arn
+  handler          = "lambda_user_action_export.handler"
+  runtime          = "python3.11"
+  timeout          = 900 # 15 minutes for CloudWatch Insights queries
+  memory_size      = 256 # More memory for processing
   source_code_hash = data.archive_file.user_action_lambda_zip.output_base64sha256
 
   environment {

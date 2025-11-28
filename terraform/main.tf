@@ -132,7 +132,7 @@ module "backend_analytics" {
   service_name          = "${var.service_name}-backend"
   log_group_name        = "/ecs/sweetdream-${var.service_name}-backend"
   analytics_bucket_name = "${var.analytics_bucket_prefix}-backend-${var.environment}"
-  export_format         = "json"  # json or csv
+  export_format         = "json" # json or csv
 
   # Filter only user action logs (optional - remove to export all logs)
   filter_pattern = ""
@@ -313,7 +313,7 @@ module "order_analytics" {
   service_name          = "${var.service_name}-order-service"
   log_group_name        = "/ecs/sweetdream-${var.service_name}-order-service"
   analytics_bucket_name = "${var.analytics_bucket_prefix}-order-${var.environment}"
-  export_format         = "json"  # json or csv
+  export_format         = "json" # json or csv
 
   # Filter only user action logs (optional)
   filter_pattern = ""
@@ -330,23 +330,23 @@ module "bastion" {
   count  = var.enable_bastion ? 1 : 0
   source = "./modules/bastion"
 
-  name_prefix            = var.service_name
-  vpc_id                 = module.vpc.vpc_id
-  subnet_id              = module.vpc.private_subnets[0]
-  rds_security_group_id  = module.vpc.rds_security_group_id
-  instance_type          = "t3.micro"
-  
+  name_prefix           = var.service_name
+  vpc_id                = module.vpc.vpc_id
+  subnet_id             = module.vpc.private_subnets[0]
+  rds_security_group_id = module.vpc.rds_security_group_id
+  instance_type         = "t3.micro"
+
   # Database connection info
   db_host     = module.rds.db_address
   db_name     = var.db_name
   db_username = var.db_username
-  
+
   # Optional: Create EIP for consistent public IP
   create_eip = false
-  
+
   # Optional: SSH key pair (if you want SSH access)
   create_key_pair = false
-  
+
   tags = {
     Environment = var.environment
     Purpose     = "Database Access"
