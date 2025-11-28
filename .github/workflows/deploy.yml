@@ -38,12 +38,54 @@ jobs:
         with:
           terraform_version: 1.6.0
       
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Check and Import Existing Resources
+        continue-on-error: true
+        run: |
+          echo "Checking for existing resources..."
+          
+          # Function to check if bucket exists
+          check_and_import_bucket() {
+            local bucket_name=$1
+            local tf_address=$2
+            
+            if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
+              echo "✓ Found bucket: $bucket_name"
+              
+              # Check if already in state
+              if ! terraform state show "$tf_address" &>/dev/null; then
+                echo "  Importing bucket into state..."
+                terraform import "$tf_address" "$bucket_name" 2>/dev/null || echo "  Import failed or already exists"
+              else
+                echo "  Already in state"
+              fi
+              
+              # Import versioning
+              local versioning_address="${tf_address/aws_s3_bucket.analytics/aws_s3_bucket_versioning.analytics}"
+              if ! terraform state show "$versioning_address" &>/dev/null; then
+                echo "  Importing versioning..."
+                terraform import "$versioning_address" "$bucket_name" 2>/dev/null || echo "  Versioning import failed"
+              fi
+            else
+              echo "✗ Bucket not found: $bucket_name (will be created)"
+            fi
+          }
+          
+          # Import backend analytics bucket
+          check_and_import_bucket "sweetdream-analytics-backend-production" "module.backend_analytics[0].aws_s3_bucket.analytics"
+          
+          # Import order analytics bucket
+          check_and_import_bucket "sweetdream-analytics-order-production" "module.order_analytics[0].aws_s3_bucket.analytics"
+          
+          echo "✓ Import check completed" >> $GITHUB_STEP_SUMMARY
+      
       - name: Terraform Apply
         run: |
-          terraform init
           terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
           terraform apply -auto-approve tfplan
-          echo "Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
 
   # Build and deploy all services
   deploy-services:
