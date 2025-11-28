@@ -38,24 +38,20 @@ jobs:
         with:
           terraform_version: 1.6.0
       
-      - name: Terraform Init
-        run: terraform init
-      
       - name: Remove Remote State (Fresh Start)
         run: |
           echo "⚠️ Removing remote Terraform state for fresh deployment..."
           aws s3 rm s3://sweetdream-terraform-state-409964509537/terraform.tfstate || true
-          echo "State removed - will create fresh state"
-      
-      - name: Clear Stale State Lock and Digest
-        continue-on-error: true
-        run: |
-          echo "Clearing stale locks and digests..."
-          # Delete the entire lock/digest item from DynamoDB
+          
+          echo "Clearing DynamoDB lock and digest..."
           aws dynamodb delete-item \
             --table-name sweetdream-terraform-locks \
-            --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' 2>/dev/null || true
-          echo "✓ Lock and digest cleared"
+            --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' || true
+          
+          echo "✓ State and locks cleared"
+      
+      - name: Terraform Init
+        run: terraform init
       
       - name: Import Existing S3 Buckets
         continue-on-error: true
