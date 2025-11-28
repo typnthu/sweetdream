@@ -63,34 +63,38 @@ jobs:
             echo "No stale locks found"
           fi
       
-      - name: Remove and Re-import Analytics Buckets
+      - name: Import Existing S3 Buckets
         continue-on-error: true
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         run: |
-          echo "Removing analytics resources from state to re-import cleanly..."
+          echo "Checking for existing S3 buckets to import..."
           
-          # Remove all analytics module resources from state
-          terraform state rm 'module.backend_analytics[0]' 2>/dev/null || echo "Backend analytics not in state"
-          terraform state rm 'module.order_analytics[0]' 2>/dev/null || echo "Order analytics not in state"
-          
-          echo "Re-importing analytics buckets..."
-          
-          # Import backend analytics bucket if it exists
+          # Import backend analytics bucket if it exists and not in state
           if aws s3api head-bucket --bucket "sweetdream-analytics-backend-production" 2>/dev/null; then
-            echo "✓ Importing backend analytics bucket..."
-            terraform import -input=false 'module.backend_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-backend-production || true
-            terraform import -input=false 'module.backend_analytics[0].aws_s3_bucket_versioning.analytics' sweetdream-analytics-backend-production || true
+            if ! terraform state show 'module.backend_analytics[0].aws_s3_bucket.analytics' &>/dev/null; then
+              echo "Importing backend analytics bucket..."
+              terraform import -input=false 'module.backend_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-backend-production || true
+            fi
+            if ! terraform state show 'module.backend_analytics[0].aws_s3_bucket_versioning.analytics' &>/dev/null; then
+              echo "Importing backend bucket versioning..."
+              terraform import -input=false 'module.backend_analytics[0].aws_s3_bucket_versioning.analytics' sweetdream-analytics-backend-production || true
+            fi
           fi
           
-          # Import order analytics bucket if it exists
+          # Import order analytics bucket if it exists and not in state
           if aws s3api head-bucket --bucket "sweetdream-analytics-order-production" 2>/dev/null; then
-            echo "✓ Importing order analytics bucket..."
-            terraform import -input=false 'module.order_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-order-production || true
-            terraform import -input=false 'module.order_analytics[0].aws_s3_bucket_versioning.analytics' sweetdream-analytics-order-production || true
+            if ! terraform state show 'module.order_analytics[0].aws_s3_bucket.analytics' &>/dev/null; then
+              echo "Importing order analytics bucket..."
+              terraform import -input=false 'module.order_analytics[0].aws_s3_bucket.analytics' sweetdream-analytics-order-production || true
+            fi
+            if ! terraform state show 'module.order_analytics[0].aws_s3_bucket_versioning.analytics' &>/dev/null; then
+              echo "Importing order bucket versioning..."
+              terraform import -input=false 'module.order_analytics[0].aws_s3_bucket_versioning.analytics' sweetdream-analytics-order-production || true
+            fi
           fi
           
-          echo "✓ Import completed" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Import check completed" >> $GITHUB_STEP_SUMMARY
       
       - name: Terraform Apply
         run: |
