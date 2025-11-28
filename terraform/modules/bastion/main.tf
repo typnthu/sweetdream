@@ -23,7 +23,7 @@ resource "aws_security_group" "bastion" {
   vpc_id      = var.vpc_id
 
   # No ingress rules needed - SSM uses outbound HTTPS
-  
+
   # Allow all outbound traffic (needed for SSM and RDS access)
   egress {
     from_port   = 0
@@ -47,7 +47,7 @@ resource "aws_security_group_rule" "rds_from_bastion" {
   source_security_group_id = aws_security_group.bastion.id
   security_group_id        = var.rds_security_group_id
   description              = "PostgreSQL from bastion"
-  
+
   lifecycle {
     create_before_destroy = true
   }
