@@ -11,13 +11,13 @@ output "s3_bucket_arn" {
 }
 
 output "lambda_function_name" {
-  description = "Lambda function name for manual export"
-  value       = aws_lambda_function.export_logs.function_name
+  description = "Lambda function name for manual export (null if disabled)"
+  value       = var.enable_lambda_export ? aws_lambda_function.export_logs[0].function_name : null
 }
 
 output "lambda_function_arn" {
-  description = "Lambda function ARN"
-  value       = aws_lambda_function.export_logs.arn
+  description = "Lambda function ARN (null if disabled)"
+  value       = var.enable_lambda_export ? aws_lambda_function.export_logs[0].arn : null
 }
 
 output "analytics_queries" {
