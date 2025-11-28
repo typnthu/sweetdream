@@ -41,6 +41,28 @@ jobs:
       - name: Terraform Init
         run: terraform init
       
+      - name: Clear Stale State Lock
+        continue-on-error: true
+        run: |
+          echo "Checking for stale state locks..."
+          # Get lock info from DynamoDB
+          LOCK_ID=$(aws dynamodb get-item \
+            --table-name sweetdream-terraform-locks \
+            --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' \
+            --query 'Item.LockID.S' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ ! -z "$LOCK_ID" ] && [ "$LOCK_ID" != "None" ]; then
+            echo "Found stale lock, attempting to clear..."
+            # Delete the lock item from DynamoDB
+            aws dynamodb delete-item \
+              --table-name sweetdream-terraform-locks \
+              --key '{"LockID":{"S":"sweetdream-terraform-state-409964509537/terraform.tfstate"}}' 2>/dev/null || true
+            echo "✓ Lock cleared"
+          else
+            echo "No stale locks found"
+          fi
+      
       - name: Check and Import Existing Resources
         continue-on-error: true
         env:
