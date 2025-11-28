@@ -51,7 +51,7 @@ jobs:
           echo "✓ State and locks cleared"
       
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -reconfigure
       
       - name: Import Existing S3 Buckets
         continue-on-error: true
