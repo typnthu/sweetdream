@@ -47,6 +47,10 @@ resource "aws_security_group_rule" "rds_from_bastion" {
   source_security_group_id = aws_security_group.bastion.id
   security_group_id        = var.rds_security_group_id
   description              = "PostgreSQL from bastion"
+  
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # IAM Role for EC2 (for SSM Session Manager - optional)
