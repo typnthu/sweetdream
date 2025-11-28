@@ -43,13 +43,13 @@ jobs:
             user-service:
               - 'user-service/**'
 
-  # Deploy infrastructure
+  # Deploy infrastructure (DISABLED - Run manually to avoid resource recreation)
   infrastructure:
     name: Infrastructure
     needs: changes
-    if: needs.changes.outputs.terraform == 'true'
+    if: false  # Disabled - run terraform manually
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Auto-cancel after 30 minutes
+    timeout-minutes: 30
     environment: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 'production' || 'development' }}
     defaults:
       run:
@@ -67,17 +67,16 @@ jobs:
         with:
           terraform_version: 1.6.0
       
-      - name: Terraform Apply
+      - name: Terraform Plan Only
         run: |
           terraform init
-          terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
-          terraform apply -auto-approve tfplan
-          echo "✅ Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
+          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}"
+          echo "⚠️ Terraform changes detected - run manually to avoid issues" >> $GITHUB_STEP_SUMMARY
 
   # Build & deploy services in parallel
   deploy-backend:
     name: Backend
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&
@@ -113,7 +112,7 @@ jobs:
 
   deploy-frontend:
     name: Frontend
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&
@@ -161,7 +160,7 @@ jobs:
 
   deploy-order-service:
     name: Order Service
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&
@@ -197,7 +196,7 @@ jobs:
 
   deploy-user-service:
     name: User Service
-    needs: [changes, infrastructure]
+    needs: [changes]
     if: |
       always() && 
       !cancelled() &&

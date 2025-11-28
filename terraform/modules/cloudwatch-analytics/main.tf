@@ -5,6 +5,11 @@
 resource "aws_s3_bucket" "analytics" {
   bucket = var.analytics_bucket_name
 
+  # Prevent accidental deletion of analytics data
+  lifecycle {
+    prevent_destroy = true
+  }
+
   tags = merge(var.tags, {
     Name    = "Customer Analytics Data"
     Purpose = "CloudWatch Logs Export"
