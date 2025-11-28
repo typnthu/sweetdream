@@ -148,7 +148,7 @@ function SuccessContent() {
 
   return (
     <AuthGuard>
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6 max-w-5xl mx-auto">
       {isFromCheckout && selectedOrder ? (
         // Success message when coming from checkout
         <div className="text-center mb-8 bg-green-50 p-6 rounded-lg">
@@ -157,15 +157,12 @@ function SuccessContent() {
             Đặt hàng thành công!
           </h1>
           <p className="text-gray-600 mb-4">
-            Cảm ơn bạn đã mua hàng. Đơn hàng #{selectedOrder.orderNumber} đã được tạo thành công.
+            Cảm ơn bạn đã mua hàng. Đơn hàng #{selectedOrder.id} đã được tạo thành công.
           </p>
         </div>
       ) : (
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Xin chào, {user?.name}! 👋
-          </h1>
-          <p className="text-gray-600">Theo dõi và quản lý các đơn hàng của bạn</p>
+          <p className="text-2xl font-bold mb-8 text-pink-500"> Đơn hàng của bạn</p>
         </div>
       )}
 
@@ -240,7 +237,7 @@ function SuccessContent() {
           <p className="text-gray-500 text-xl mb-4">Chưa có đơn hàng nào</p>
           <Link
             href="/"
-            className="bg-pink-600 text-white px-6 py-3 rounded-lg hover:bg-pink-700 transition"
+            className="bg-white text-pink-500 px-3 py-3 rounded-lg hover:text-pink-700 transition"
           >
             Bắt đầu mua sắm
           </Link>

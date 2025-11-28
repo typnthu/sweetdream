@@ -101,7 +101,7 @@ export default function Cart() {
   return (
     <AuthGuard showLoginPrompt={true}>
       <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-8 text-pink-500">🛒 Giỏ hàng</h1>
+      <h1 className="text-2xl font-bold mb-8 text-pink-500">Giỏ hàng</h1>
 
       {cart.length === 0 ? (
         <div className="text-center py-12">
@@ -127,7 +127,7 @@ export default function Cart() {
                 {/* Nút xóa ở góc trên bên phải */}
                 <button
                   onClick={() => removeFromCart(item.id)}
-                  className="absolute top-1 right-2 text-red-500 hover:text-red-700 text-lg"
+                  className="absolute top-1 right-2 text-red-500 hover:text-red-700 text-sm"
                 >
                   x
                 </button>
@@ -153,7 +153,7 @@ export default function Cart() {
 
                   <div>
                     <p
-                      className="font-semibold text-gray-800 cursor-pointer hover:text-pink-600 transition-colors"
+                      className=" text-gray-800 cursor-pointer hover:text-pink-600 transition-colors"
                       onClick={() => {
                         if (item.originalProductId) {
                           router.push(`/product/${item.originalProductId}`);
@@ -162,26 +162,26 @@ export default function Cart() {
                     >
                       {item.name}
                     </p>
-                    <p className="text-pink-500 font-bold">
+                    <p className="text-pink-500 text">
                       {formatPrice(item.price)}
                     </p>
 
                     {/* Điều chỉnh số lượng */}
-                    <div className="flex items-center mt-2">
-                      <button
-                        onClick={() => updateQuantity(item.id, Math.max(item.qty - 1, 1))}
-                        className="px-3 py-1 hover:bg-gray-300 bg-gray-200 rounded"
-                      >
-                        -
-                      </button>
-                      <span className="px-4 font-medium">{item.qty}</span>
-                      <button
-                        onClick={() => updateQuantity(item.id, item.qty + 1)}
-                        className="px-3 py-1 hover:bg-gray-300 rounded bg-gray-200"
-                      >
-                        +
-                      </button>
-                    </div>
+                      <div className="flex items-center mt-1">
+                        <button
+                          onClick={() => updateQuantity(item.id, Math.max(item.qty - 1, 1))}
+                          className="px-2 py-1 hover:bg-gray-300 bg-gray-200 rounded text-xs"
+                        >
+                          -
+                        </button>
+                        <span className="px-3 text-sm font-medium">{item.qty}</span>
+                        <button
+                          onClick={() => updateQuantity(item.id, item.qty + 1)}
+                          className="px-2 py-1 hover:bg-gray-300 rounded bg-gray-200 text-xs"
+                        >
+                          +
+                        </button>
+                      </div>
                   </div>
                 </div>
 

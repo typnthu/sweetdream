@@ -1,6 +1,8 @@
 import express from 'express';
 import { prisma } from '../server';
 import { validateProduct } from '../validators/product';
+import { logProductView } from '../utils/analyticsLogger';
+import { optionalAuth } from '../middleware/optionalAuth';
 
 const router = express.Router();
 
@@ -29,7 +31,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get product by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -48,6 +50,18 @@ router.get('/:id', async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    // Log product view for analytics
+    const user = (req as any).user;
+    logProductView({
+      userId: user?.id,
+      userName: user?.name,
+      sessionId: req.headers['x-session-id'] as string,
+      productId: product.id,
+      productName: product.name,
+      category: product.category.name,
+      price: Number(product.sizes[0]?.price || 0)
+    });
 
     res.json(product);
   } catch (error) {

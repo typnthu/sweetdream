@@ -1,7 +1,9 @@
-// Copy of main schema - same as user-service
+// Shared schema - synced with be/prisma/schema.prisma
+// All services use the same database
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -26,11 +28,12 @@ model Product {
   description String?       @db.Text
   img         String
   categoryId  Int
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   category    Category      @relation(fields: [categoryId], references: [id])
   sizes       ProductSize[]
   orderItems  OrderItem[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  cartItems   CartItem[]
 
   @@map("products")
 }
@@ -47,14 +50,16 @@ model ProductSize {
 }
 
 model Customer {
-  id        Int      @id @default(autoincrement())
+  id        Int          @id @default(autoincrement())
   name      String
-  email     String   @unique
+  email     String       @unique
   phone     String?
-  address   String?  @db.Text
+  address   String?      @db.Text
+  role      CustomerRole @default(CUSTOMER)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
   orders    Order[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  cart      Cart?
 
   @@map("customers")
 }
@@ -87,6 +92,33 @@ model OrderItem {
   @@map("order_items")
 }
 
+model Cart {
+  id         Int        @id @default(autoincrement())
+  customerId Int        @unique
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  size      String
+  quantity  Int      @default(1)
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId, size])
+  @@map("cart_items")
+}
+
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -94,4 +126,9 @@ enum OrderStatus {
   READY
   DELIVERED
   CANCELLED
+}
+
+enum CustomerRole {
+  CUSTOMER
+  ADMIN
 }

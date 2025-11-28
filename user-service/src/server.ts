@@ -11,7 +11,7 @@ import Joi from 'joi';
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3003;
 const prisma = new PrismaClient();
 
 // Middleware
@@ -105,7 +105,8 @@ app.post('/api/auth/register', async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        address: user.address
+        address: user.address,
+        role: user.role.toLowerCase() // Convert ADMIN/CUSTOMER to admin/customer
       },
       token
     });
@@ -158,7 +159,8 @@ app.post('/api/auth/login', async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        address: user.address
+        address: user.address,
+        role: user.role.toLowerCase() // Convert ADMIN/CUSTOMER to admin/customer
       },
       token
     });
@@ -197,7 +199,8 @@ app.post('/api/auth/verify', async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        address: user.address
+        address: user.address,
+        role: user.role.toLowerCase() // Convert ADMIN/CUSTOMER to admin/customer
       }
     });
   } catch (error) {

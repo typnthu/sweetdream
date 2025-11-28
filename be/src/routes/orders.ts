@@ -172,7 +172,7 @@ router.post('/', async (req, res) => {
       }
     });
 
-    res.status(201).json(order);
+    res.status(201).json({ order });
   } catch (error) {
     console.error('Error creating order:', error);
     res.status(500).json({ error: 'Failed to create order' });
@@ -217,7 +217,35 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-// Delete order (Cancel)
+// Cancel order
+router.post('/:id/cancel', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const order = await prisma.order.update({
+      where: { id: parseInt(id) },
+      data: { status: 'CANCELLED' },
+      include: {
+        customer: true,
+        items: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+
+    res.json({ order });
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    res.status(500).json({ error: 'Failed to cancel order' });
+  }
+});
+
+// Delete order (Admin only)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;

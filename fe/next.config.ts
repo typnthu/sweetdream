@@ -15,24 +15,17 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'sweetdream-products-data.s3.us-east-1.amazonaws.com',
-        pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: '*.s3.us-east-1.amazonaws.com',
-        pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'file.hstatic.net',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.hstatic.net',
-        pathname: '/**',
+        hostname: '*.s3.amazonaws.com',
       },
     ],
+    unoptimized: true, // Disable optimization to avoid private IP check
   },
 };
 

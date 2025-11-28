@@ -162,6 +162,22 @@ resource "aws_security_group" "ecs" {
     description = "Backend port from VPC"
   }
 
+    ingress {
+    from_port   = 3002
+    to_port     = 3002
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+    description = "Backend port from VPC"
+  }
+
+    ingress {
+    from_port   = 3003
+    to_port     = 3003
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+    description = "Backend port from VPC"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

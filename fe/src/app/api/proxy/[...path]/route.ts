@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Microservices URLs
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3003';
 const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || 'http://localhost:3002';
-const BACKEND_SERVICE_URL = process.env.BACKEND_API_URL || 'http://localhost:3003';
+const BACKEND_SERVICE_URL = process.env.BACKEND_API_URL || 'http://localhost:3001';
 
 // Route requests to appropriate microservice
 function getServiceUrl(path: string): string {
@@ -15,6 +15,11 @@ function getServiceUrl(path: string): string {
   // Order routes go to Order Service
   if (path.startsWith('orders')) {
     return ORDER_SERVICE_URL;
+  }
+  
+  // Cart routes go to Backend Service
+  if (path.startsWith('cart')) {
+    return BACKEND_SERVICE_URL;
   }
   
   // Products and Categories go to Backend Service

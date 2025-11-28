@@ -22,31 +22,29 @@ services:
 
   # User Service (Registration & Authentication)
   user-service:
-    build:
-      context: ./user-service
-      dockerfile: Dockerfile
+    build: ./user-service
+    image: user-service
     container_name: sweetdream-user-service
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3003:3003"
     environment:
       NODE_ENV: development
-      PORT: 3001
+      PORT: 3003
       DATABASE_URL: postgresql://dev:dev123@postgres:5432/sweetdream
-      JWT_SECRET: local-dev-secret-key
+      JWT_SECRET: local-dev-secret-key-change-in-production
+      JWT_EXPIRES_IN: 7d
       FRONTEND_URL: http://localhost:3000
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - sweetdream-network
-    command: sh -c "sleep 5 && npx prisma generate && npx prisma db push --accept-data-loss && npm run dev"
 
   # Order Service (Order Processing)
   order-service:
-    build:
-      context: ./order-service
-      dockerfile: Dockerfile
+    build: ./order-service
+    image: order-service
     container_name: sweetdream-order-service
     restart: unless-stopped
     ports:
@@ -55,59 +53,54 @@ services:
       NODE_ENV: development
       PORT: 3002
       DATABASE_URL: postgresql://dev:dev123@postgres:5432/sweetdream
-      USER_SERVICE_URL: http://user-service:3001
+      USER_SERVICE_URL: http://user-service:3003
       FRONTEND_URL: http://localhost:3000
     depends_on:
       - postgres
       - user-service
     networks:
       - sweetdream-network
-    command: sh -c "sleep 10 && npx prisma generate && npm run dev"
 
   # Original Backend (Products & Categories)
   backend:
-    build:
-      context: ./be
-      dockerfile: Dockerfile
+    build: ./be
+    image: backend
     container_name: sweetdream-backend
     restart: unless-stopped
     ports:
-      - "3003:3001"
+      - "3001:3001"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 3001
       DATABASE_URL: postgresql://dev:dev123@postgres:5432/sweetdream
-      JWT_SECRET: local-dev-secret-key
+      JWT_SECRET: local-dev-secret-key-change-in-production
+      JWT_EXPIRES_IN: 7d
       FRONTEND_URL: http://localhost:3000
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - sweetdream-network
-    command: sh -c "npx prisma generate && npx prisma db push --accept-data-loss && npm run seed && npm run dev"
 
   # Frontend
   frontend:
-    build:
-      context: ./fe
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:3003
+    build: ./fe
+    image: frontend
     container_name: sweetdream-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3003
-      NEXT_PUBLIC_USER_SERVICE_URL: http://localhost:3001
-      NEXT_PUBLIC_ORDER_SERVICE_URL: http://localhost:3002
+      NEXT_PUBLIC_API_URL: /api/proxy
+      BACKEND_API_URL: http://backend:3001
+      USER_SERVICE_URL: http://user-service:3003
+      ORDER_SERVICE_URL: http://order-service:3002
     depends_on:
       - backend
       - user-service
       - order-service
     networks:
       - sweetdream-network
-    command: npm run dev
 
 volumes:
   postgres_data:

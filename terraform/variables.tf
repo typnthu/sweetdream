@@ -59,7 +59,57 @@ variable "s3_bucket_name" {
   default     = "sweetdream-logs-data"
 }
 
-variable "s3_products_bucket_name" {
-  description = "S3 bucket name for product images"
-  default     = "sweetdream-products"
+# CloudWatch Monitoring
+variable "alert_email" {
+  description = "Email address for CloudWatch alarm notifications"
+  type        = string
+  default     = "your-email@example.com"
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, production)"
+  type        = string
+  default     = "production"
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "enable_customer_analytics" {
+  description = "Enable customer analytics queries in CloudWatch Insights"
+  type        = bool
+  default     = false
+}
+
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 7
+}
+
+variable "analytics_bucket_prefix" {
+  description = "Prefix for analytics S3 bucket names (must be globally unique)"
+  type        = string
+  default     = "sweetdream-analytics"
+}
+
+# Blue/Green Deployment
+variable "traffic_distribution" {
+  description = "Blue/Green deployment: 'blue' (current production) or 'green' (new version)"
+  type        = string
+  default     = "blue"
+
+  validation {
+    condition     = contains(["blue", "green"], var.traffic_distribution)
+    error_message = "Must be either 'blue' or 'green' for blue/green deployment"
+  }
+}
+
+variable "enable_bastion" {
+  description = "Enable bastion host for RDS access"
+  type        = bool
+  default     = false
 }

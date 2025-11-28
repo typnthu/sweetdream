@@ -14,7 +14,7 @@ const port = process.env.PORT || 3002;
 const prisma = new PrismaClient();
 
 // User service URL
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3003';
 
 // Middleware
 app.use(helmet());
@@ -58,30 +58,31 @@ const orderSchema = Joi.object({
 // Helper function to communicate with User Service
 async function getOrCreateCustomer(customerData: any) {
   try {
-    console.log(`🔗 Calling User Service: ${USER_SERVICE_URL}/api/customers/email/${customerData.email}`);
-    
     // Try to get existing customer
     try {
       const response = await axios.get(
         `${USER_SERVICE_URL}/api/customers/email/${customerData.email}`
       );
-      console.log('✅ Customer found in User Service');
       return response.data;
     } catch (error: any) {
       if (error.response?.status === 404) {
         // Customer doesn't exist, create new one
-        console.log('📝 Creating new customer in User Service');
         const createResponse = await axios.post(
           `${USER_SERVICE_URL}/api/customers`,
           customerData
         );
-        console.log('✅ Customer created in User Service');
         return createResponse.data;
       }
       throw error;
     }
   } catch (error) {
-    console.error('❌ Error communicating with User Service:', error);
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      service: 'order-service',
+      message: 'User Service communication failed',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }));
     throw new Error('Failed to communicate with User Service');
   }
 }
@@ -187,12 +188,8 @@ app.post('/api/orders', async (req, res) => {
 
     const { customer: customerData, items, notes } = value;
 
-    console.log('📦 Creating new order...');
-    console.log('👤 Customer data:', customerData);
-
     // MICROSERVICE COMMUNICATION: Call User Service to get/create customer
     const customer = await getOrCreateCustomer(customerData);
-    console.log('✅ Customer retrieved/created:', customer.id);
 
     // Calculate total
     let total = 0;
@@ -208,7 +205,7 @@ app.post('/api/orders', async (req, res) => {
         });
       }
 
-      const size = product.sizes.find(s => s.size === item.size);
+      const size = product.sizes.find((s: any) => s.size === item.size);
       if (!size) {
         return res.status(400).json({ 
           error: `Size ${item.size} not found for product ${product.name}` 
@@ -247,7 +244,27 @@ app.post('/api/orders', async (req, res) => {
       }
     });
 
-    console.log('✅ Order created successfully:', order.id);
+    // Log order creation for analytics
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      service: 'order-service',
+      category: 'user_action',
+      message: 'Order Completed',
+      userId: customer.id,
+      userName: customer.name,
+      metadata: {
+        orderId: order.id,
+        totalAmount: total,
+        itemCount: items.length,
+        items: items.map((item: any) => ({
+          productId: item.productId,
+          size: item.size,
+          quantity: item.quantity,
+          price: item.price
+        }))
+      }
+    }));
 
     res.status(201).json({
       message: 'Order created successfully',
@@ -447,9 +464,14 @@ process.on('SIGTERM', async () => {
 });
 
 app.listen(port, () => {
-  console.log(`📦 Order Service running on port ${port}`);
-  console.log(`📊 Health check: http://localhost:${port}/health`);
-  console.log(`🔗 User Service URL: ${USER_SERVICE_URL}`);
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'INFO',
+    service: 'order-service',
+    message: 'Server started',
+    port,
+    userServiceUrl: USER_SERVICE_URL
+  }));
 });
 
 export default app;

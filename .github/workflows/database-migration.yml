@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to run migrations'
+        description: 'Environment'
         required: true
         type: choice
         options:
           - development
           - production
-      migration_type:
-        description: 'Migration type'
+      action:
+        description: 'Migration action'
         required: true
         type: choice
         options:
@@ -22,70 +22,55 @@ on:
 env:
   AWS_REGION: us-east-1
   ECS_CLUSTER: sweetdream-cluster
-  ECS_BACKEND_SERVICE: sweetdream-service-backend
 
 jobs:
   migrate:
-    name: Run Database Migration
+    name: Run Migration
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get ECS task ARN
-        id: get-task
+      
+      - name: Get Task
+        id: task
         run: |
           TASK_ARN=$(aws ecs list-tasks \
             --cluster ${{ env.ECS_CLUSTER }} \
-            --service-name ${{ env.ECS_BACKEND_SERVICE }} \
+            --service-name sweetdream-service-backend \
             --desired-status RUNNING \
             --query 'taskArns[0]' \
             --output text)
-          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
-
-      - name: Run Migration - Deploy
-        if: github.event.inputs.migration_type == 'deploy'
+          echo "arn=$TASK_ARN" >> $GITHUB_OUTPUT
+      
+      - name: Run Migration
         run: |
+          case "${{ github.event.inputs.action }}" in
+            deploy)
+              CMD="npm run migrate"
+              ;;
+            seed)
+              CMD="npm run seed:prod"
+              ;;
+            reset)
+              CMD="npx prisma migrate reset --force"
+              ;;
+          esac
+          
+          echo "Running: $CMD"
+          
           aws ecs execute-command \
             --cluster ${{ env.ECS_CLUSTER }} \
-            --task ${{ steps.get-task.outputs.task_arn }} \
+            --task ${{ steps.task.outputs.arn }} \
             --container sweetdream-backend \
             --interactive \
-            --command "npm run migrate"
-
-      - name: Run Migration - Seed
-        if: github.event.inputs.migration_type == 'seed'
+            --command "$CMD"
+      
+      - name: Summary
         run: |
-          aws ecs execute-command \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --task ${{ steps.get-task.outputs.task_arn }} \
-            --container sweetdream-backend \
-            --interactive \
-            --command "npm run seed:prod"
-
-      - name: Run Migration - Reset
-        if: github.event.inputs.migration_type == 'reset'
-        run: |
-          aws ecs execute-command \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --task ${{ steps.get-task.outputs.task_arn }} \
-            --container sweetdream-backend \
-            --interactive \
-            --command "npx prisma migrate reset --force"
-
-      - name: Migration Summary
-        run: |
-          echo "## Migration Complete! 🗄️" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Migration Complete" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Type**: ${{ github.event.inputs.migration_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Task**: ${{ steps.get-task.outputs.task_arn }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ github.event.inputs.action }}" >> $GITHUB_STEP_SUMMARY

@@ -2,267 +2,268 @@ name: Deploy
 
 on:
   push:
-    branches:
-      - dev
-      - main
+    branches: [main, dev]
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deploy all services'
+        type: boolean
+        default: false
 
 env:
   AWS_REGION: us-east-1
-  TF_VERSION: 1.6.0
   ECS_CLUSTER: sweetdream-cluster
 
 jobs:
-  # Detect what changed
-  detect-changes:
+  # Detect changes
+  changes:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
       terraform: ${{ steps.filter.outputs.terraform }}
-      application: ${{ steps.filter.outputs.application }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      order-service: ${{ steps.filter.outputs.order-service }}
+      user-service: ${{ steps.filter.outputs.user-service }}
+      force: ${{ github.event.inputs.force_deploy || 'false' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Detect changed paths
-        uses: dorny/paths-filter@v2
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
             terraform:
               - 'terraform/**'
-            application:
+            backend:
               - 'be/**'
+            frontend:
               - 'fe/**'
+            order-service:
               - 'order-service/**'
+            user-service:
               - 'user-service/**'
-              - '.github/workflows/deploy.yml'
 
-  # Deploy infrastructure ONLY if terraform files changed
-  deploy-infrastructure:
-    name: Deploy Infrastructure
-    needs: detect-changes
-    if: needs.detect-changes.outputs.terraform == 'true'
+  # Deploy infrastructure
+  infrastructure:
+    name: Infrastructure
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     defaults:
       run:
         working-directory: terraform
-    outputs:
-      alb_url: ${{ steps.outputs.outputs.alb_url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          terraform_version: 1.6.0
       
-      - name: Terraform Init
-        run: terraform init
-      
-      - name: Terraform Plan
-        run: terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
-      
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
-      
-      - name: Save Outputs
-        id: outputs
+      - name: Deploy
         run: |
-          echo "alb_url=$(terraform output -raw alb_url)" >> $GITHUB_OUTPUT
-          echo "✅ Infrastructure deployed!" >> $GITHUB_STEP_SUMMARY
+          terraform init
+          terraform plan -out=tfplan -var="db_password=${{ secrets.DB_PASSWORD }}"
+          terraform apply -auto-approve tfplan
+          echo "✅ Infrastructure deployed" >> $GITHUB_STEP_SUMMARY
 
-  # Build and push Docker images (ONLY if application changed)
-  build-images:
-    name: Build & Push Images
-    needs: [detect-changes, deploy-infrastructure]
-    if: always() && needs.detect-changes.outputs.application == 'true'
+  # Build & deploy services in parallel
+  deploy-backend:
+    name: Backend
+    needs: [changes, infrastructure]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.force == 'true')
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
       
-      - name: Create ECR Repositories if needed
-        run: |
-          echo "🐳 Ensuring ECR repositories exist..."
-          
-          repos=("sweetdream-backend" "sweetdream-frontend" "sweetdream-user-service" "sweetdream-order-service")
-          
-          for repo in "${repos[@]}"; do
-            echo "Checking repository: $repo"
-            aws ecr describe-repositories --repository-names $repo --region ${{ env.AWS_REGION }} 2>/dev/null || \
-            aws ecr create-repository \
-              --repository-name $repo \
-              --image-scanning-configuration scanOnPush=true \
-              --encryption-configuration encryptionType=AES256 \
-              --region ${{ env.AWS_REGION }} && \
-            echo "✅ Created repository: $repo" || \
-            echo "ℹ️  Repository already exists: $repo"
-          done
-      
-      - name: Get ALB URL
-        id: get-alb
-        run: |
-          ALB_URL=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' --output text)
-          echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
-      
-      - name: Build and Push Backend
+      - name: Build & Push
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          cd be
-          docker build -t $ECR_REGISTRY/sweetdream-backend:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/sweetdream-backend:$IMAGE_TAG $ECR_REGISTRY/sweetdream-backend:latest
-          docker push $ECR_REGISTRY/sweetdream-backend:$IMAGE_TAG
+          docker build -t $ECR_REGISTRY/sweetdream-backend:latest ./be
           docker push $ECR_REGISTRY/sweetdream-backend:latest
       
-      - name: Build and Push Frontend
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-          NEXT_PUBLIC_API_URL: http://${{ steps.get-alb.outputs.alb_url }}
+      - name: Deploy
         run: |
-          cd fe
-          docker build --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL -t $ECR_REGISTRY/sweetdream-frontend:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/sweetdream-frontend:$IMAGE_TAG $ECR_REGISTRY/sweetdream-frontend:latest
-          docker push $ECR_REGISTRY/sweetdream-frontend:$IMAGE_TAG
-          docker push $ECR_REGISTRY/sweetdream-frontend:latest
-      
-      - name: Build and Push Order Service
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          cd order-service
-          docker build -t $ECR_REGISTRY/sweetdream-order-service:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/sweetdream-order-service:$IMAGE_TAG $ECR_REGISTRY/sweetdream-order-service:latest
-          docker push $ECR_REGISTRY/sweetdream-order-service:$IMAGE_TAG
-          docker push $ECR_REGISTRY/sweetdream-order-service:latest
-      
-      - name: Build and Push User Service
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          cd user-service
-          docker build -t $ECR_REGISTRY/sweetdream-user-service:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/sweetdream-user-service:$IMAGE_TAG $ECR_REGISTRY/sweetdream-user-service:latest
-          docker push $ECR_REGISTRY/sweetdream-user-service:$IMAGE_TAG
-          docker push $ECR_REGISTRY/sweetdream-user-service:latest
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service sweetdream-service-backend \
+            --force-new-deployment \
+            --no-cli-pager
 
-  # Deploy to ECS (ONLY if application changed)
-  deploy-application:
-    name: Deploy to ECS
-    needs: [detect-changes, build-images]
-    if: always() && needs.detect-changes.outputs.application == 'true'
+  deploy-frontend:
+    name: Frontend
+    needs: [changes, infrastructure]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.force == 'true')
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     steps:
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       
-      - name: Force new deployment for all services
-        run: |
-          echo "🚀 Deploying all services..."
-          
-          # Correct service names from Terraform: ${var.service_name}-{backend|frontend|user-service|order-service}
-          # Default service_name = "sweetdream-service"
-          
-          services=(
-            "sweetdream-service-backend"
-            "sweetdream-service-frontend"
-            "sweetdream-service-user-service"
-            "sweetdream-service-order-service"
-          )
-          
-          for service in "${services[@]}"; do
-            echo "Deploying: $service"
-            if aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services $service --query 'services[0].serviceName' --output text 2>/dev/null | grep -q "$service"; then
-              aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service $service --force-new-deployment
-              echo "✅ Deployed: $service"
-            else
-              echo "⚠️  Service not found: $service (will be created by Terraform)"
-            fi
-          done
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
       
-      - name: Trigger deployment (no wait)
+      - name: Get ALB URL
+        id: alb
         run: |
-          echo "✅ Deployment triggered for all services!"
-          echo "⚠️  Not waiting for stability - check ECS console for status"
-          echo ""
-          echo "Services will update in background:"
-          echo "  - sweetdream-service-backend"
-          echo "  - sweetdream-service-frontend"
-          echo "  - sweetdream-service-user-service"
-          echo "  - sweetdream-service-order-service"
+          ALB_URL=$(aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' \
+            --output text)
+          echo "url=$ALB_URL" >> $GITHUB_OUTPUT
+      
+      - name: Build & Push
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          NEXT_PUBLIC_API_URL: http://${{ steps.alb.outputs.url }}
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+            -t $ECR_REGISTRY/sweetdream-frontend:latest \
+            ./fe
+          docker push $ECR_REGISTRY/sweetdream-frontend:latest
+      
+      - name: Deploy
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service sweetdream-service-frontend \
+            --force-new-deployment \
+            --no-cli-pager
+
+  deploy-order-service:
+    name: Order Service
+    needs: [changes, infrastructure]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.changes.outputs.order-service == 'true' || needs.changes.outputs.force == 'true')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      
+      - name: Build & Push
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -t $ECR_REGISTRY/sweetdream-order-service:latest ./order-service
+          docker push $ECR_REGISTRY/sweetdream-order-service:latest
+      
+      - name: Deploy
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service sweetdream-service-order-service \
+            --force-new-deployment \
+            --no-cli-pager
+
+  deploy-user-service:
+    name: User Service
+    needs: [changes, infrastructure]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.changes.outputs.user-service == 'true' || needs.changes.outputs.force == 'true')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      
+      - name: Build & Push
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -t $ECR_REGISTRY/sweetdream-user-service:latest ./user-service
+          docker push $ECR_REGISTRY/sweetdream-user-service:latest
+      
+      - name: Deploy
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service sweetdream-service-user-service \
+            --force-new-deployment \
+            --no-cli-pager
 
   # Summary
-  deployment-summary:
-    name: Deployment Summary
-    needs: [detect-changes, deploy-infrastructure, deploy-application]
+  summary:
+    name: Summary
+    needs: [changes, infrastructure, deploy-backend, deploy-frontend, deploy-order-service, deploy-user-service]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       
-      - name: Get deployment info
+      - name: Get Info
         id: info
         run: |
-          ALB_URL=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' --output text)
+          ALB_URL=$(aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' \
+            --output text)
           echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
       
-      - name: Create summary
+      - name: Create Summary
         run: |
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📊 What Was Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "- **Terraform Changed**: ${{ needs.detect-changes.outputs.terraform }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Application Changed**: ${{ needs.detect-changes.outputs.application }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🎯 Results" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.detect-changes.outputs.terraform }}" == "true" ]; then
-            echo "- ✅ Infrastructure: ${{ needs.deploy-infrastructure.result }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- ⏭️ Infrastructure: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ needs.detect-changes.outputs.application }}" == "true" ]; then
-            echo "- ✅ Application: ${{ needs.deploy-application.result }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- ⏭️ Application: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "| Component | Changed | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Infrastructure | ${{ needs.changes.outputs.terraform }} | ${{ needs.infrastructure.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ needs.changes.outputs.backend }} | ${{ needs.deploy-backend.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ needs.changes.outputs.frontend }} | ${{ needs.deploy-frontend.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Service | ${{ needs.changes.outputs.order-service }} | ${{ needs.deploy-order-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| User Service | ${{ needs.changes.outputs.user-service }} | ${{ needs.deploy-user-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🌐 Access" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: http://${{ steps.info.outputs.alb_url }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

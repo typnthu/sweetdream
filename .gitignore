@@ -63,11 +63,21 @@ coverage/
 prisma/migrations/
 
 # Docker
-docker-compose.override.yml
+
 
 # Local development scripts and test data
 be/export-products.js
 be/view-products.js
+
+# Analytics documentation (keep locally, not in repo)
+analytics-data/
+
+# Test/temporary response files
+response*.json
+*.json.tmp
+
+# PowerShell scripts for local testing
+scripts/make-user-admin.ps1
 
 # Misc
 *.bak
