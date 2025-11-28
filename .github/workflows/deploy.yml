@@ -55,18 +55,19 @@ jobs:
         run: terraform init -reconfigure
       
 
-      - name: Terraform Plan
+      - name: Terraform Plan (Targeted - Lambda & Bastion Only)
         run: |
-          echo "Running Terraform plan..."
-          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}" -out=tfplan
-          
-          echo ""
-          echo "Plan summary:"
-          terraform show -json tfplan | jq -r '.resource_changes[] | select(.change.actions != ["no-op"]) | "\(.change.actions[0]): \(.address)"'
+          echo "Planning Lambda and Bastion deployment only..."
+          terraform plan \
+            -target='module.backend_analytics[0]' \
+            -target='module.order_analytics[0]' \
+            -target='module.bastion[0]' \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -out=tfplan
       
-      - name: Terraform Apply
+      - name: Terraform Apply (Targeted)
         run: |
-          echo "Applying Terraform changes..."
+          echo "Applying Lambda and Bastion only..."
           terraform apply -auto-approve tfplan
           
           echo ""
