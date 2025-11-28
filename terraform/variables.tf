@@ -63,7 +63,7 @@ variable "s3_bucket_name" {
 variable "alert_email" {
   description = "Email address for CloudWatch alarm notifications"
   type        = string
-  default     = "your-email@example.com"
+  default     = "user@example.com"
 }
 
 variable "environment" {
