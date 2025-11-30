@@ -127,6 +127,23 @@ async function seed() {
     console.log(`❌ Errors: ${errorCount} products`);
     console.log('='.repeat(60));
 
+    // Create default admin user
+    console.log('\n👤 Creating default admin user...');
+    const bcrypt = require('bcrypt');
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    
+    const admin = await prisma.customer.upsert({
+      where: { email: 'admin@sweetdream.com' },
+      update: { role: 'ADMIN' },
+      create: {
+        email: 'admin@sweetdream.com',
+        password: adminPassword,
+        name: 'Admin',
+        role: 'ADMIN'
+      }
+    });
+    console.log(`✅ Admin user created: ${admin.email}`);
+
     // Display categories
     const categories = await prisma.category.findMany({
       include: {

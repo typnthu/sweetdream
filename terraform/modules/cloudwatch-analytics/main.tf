@@ -7,7 +7,7 @@ resource "aws_s3_bucket" "analytics" {
 
   # Prevent accidental deletion of analytics data
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 
   tags = merge(var.tags, {

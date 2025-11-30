@@ -55,11 +55,10 @@ jobs:
         run: terraform init -reconfigure
       
 
-      - name: Terraform Plan (Targeted - Bastion Only)
+      - name: Terraform Plan
         run: |
-          echo "Planning Bastion deployment only..."
+          echo "Planning deployment..."
           terraform plan \
-            -target='module.bastion[0]' \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -out=tfplan
       

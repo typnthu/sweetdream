@@ -18,7 +18,9 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     // User-service uses 'userId', map it to 'id' for consistency
     (req as any).user = {
       id: decoded.userId || decoded.id,
-      email: decoded.email
+      email: decoded.email,
+      // HARDCODED: admin@sweetdream.com is always ADMIN
+      role: decoded.email === 'admin@sweetdream.com' ? 'ADMIN' : (decoded.role || 'CUSTOMER')
     };
     next();
   });

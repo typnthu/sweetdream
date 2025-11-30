@@ -39,6 +39,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/package*.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+COPY --chown=nextjs:nodejs startup.sh ./startup.sh
+
+RUN chmod +x startup.sh
 
 USER nextjs
 
@@ -49,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["sh", "-c", "npx prisma db push && node dist/server.js"]
+CMD ["./startup.sh"]
