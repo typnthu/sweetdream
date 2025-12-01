@@ -114,9 +114,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# Note: Backend is NOT exposed through ALB
-# Backend is accessed internally by Frontend via ECS Service Discovery
-
 
 # Security Group Rule to allow ALB to communicate with ECS
 resource "aws_security_group_rule" "alb_to_ecs" {
