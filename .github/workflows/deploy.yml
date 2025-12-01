@@ -209,13 +209,15 @@ jobs:
         run: |
           TASK_FAMILY="sweetdream-task-${{ matrix.service.name }}"
           IMAGE_NAME=$ECR_REGISTRY/sweetdream-${{ matrix.service.name }}:latest
+          LOG_GROUP="/ecs/sweetdream-sweetdream-service-${{ matrix.service.name }}"
           
-          # Get current task definition and update image
+          # Get current task definition and update image + log group
           TASK_DEF=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY --query 'taskDefinition')
           
-          # Update image and clean up AWS-managed fields
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_NAME" '
+          # Update image, fix log group name, and clean up AWS-managed fields
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_NAME" --arg LOG_GROUP "$LOG_GROUP" '
             .containerDefinitions[0].image = $IMAGE |
+            .containerDefinitions[0].logConfiguration.options."awslogs-group" = $LOG_GROUP |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
           ')
           
