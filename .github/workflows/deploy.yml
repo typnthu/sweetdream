@@ -200,48 +200,99 @@ jobs:
           docker push $IMAGE_NAME:$IMAGE_TAG
           
           echo "✅ Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+
+  # Update task definitions with Terraform after images are pushed
+  update-task-definitions:
+    name: Update Task Definitions
+    needs: [changes, deploy-services]
+    if: |
+      always() && !cancelled() &&
+      needs.deploy-services.result == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
       
-      - name: Update Task Definition with New Image
-        if: steps.check.outputs.deploy == 'true'
-        id: task-def
-        env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Apply (Update Task Definitions)
         run: |
-          TASK_FAMILY="sweetdream-task-${{ matrix.service.name }}"
-          IMAGE_NAME=$ECR_REGISTRY/sweetdream-${{ matrix.service.name }}:latest
-          LOG_GROUP="/ecs/sweetdream-sweetdream-service-${{ matrix.service.name }}"
+          terraform apply -auto-approve \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
+            -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
+            -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
+            -var="analytics_bucket_prefix=${{ vars.ANALYTICS_BUCKET_PREFIX || 'sweetdream-analytics' }}"
           
-          # Get current task definition and update image + log group
-          TASK_DEF=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY --query 'taskDefinition')
-          
-          # Update image, fix log group name, and clean up AWS-managed fields
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_NAME" --arg LOG_GROUP "$LOG_GROUP" '
-            .containerDefinitions[0].image = $IMAGE |
-            .containerDefinitions[0].logConfiguration.options."awslogs-group" = $LOG_GROUP |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-          ')
-          
-          # Register new task definition and capture the ARN
-          NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" | jq -r '.taskDefinition.taskDefinitionArn')
-          
-          echo "task_arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
-          echo "✅ Registered new task definition: $NEW_TASK_ARN" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Task definitions updated with new ECR images" >> $GITHUB_STEP_SUMMARY
+
+  # Force ECS to use updated task definitions
+  redeploy-services:
+    name: Redeploy Services
+    needs: [changes, update-task-definitions]
+    if: |
+      always() && !cancelled() &&
+      needs.update-task-definitions.result == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            changed: ${{ needs.changes.outputs.backend }}
+          - name: frontend
+            changed: ${{ needs.changes.outputs.frontend }}
+          - name: order-service
+            changed: ${{ needs.changes.outputs.order-service }}
+          - name: user-service
+            changed: ${{ needs.changes.outputs.user-service }}
+      fail-fast: false
+    steps:
+      - name: Check if deployment needed
+        id: check
+        run: |
+          if [[ "${{ matrix.service.changed }}" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+          fi
       
-      - name: Update ECS Service with New Task Definition
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check.outputs.deploy == 'true'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to ECS
         if: steps.check.outputs.deploy == 'true'
         run: |
           SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
           
-          echo "🚀 Updating $SERVICE_NAME to use new task definition..."
+          echo "🚀 Deploying $SERVICE_NAME..."
           
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service $SERVICE_NAME \
-            --task-definition ${{ steps.task-def.outputs.task_arn }} \
             --force-new-deployment \
             --no-cli-pager
           
-          echo "✅ $SERVICE_NAME updated with new task definition" >> $GITHUB_STEP_SUMMARY
+          echo "✅ $SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
       
       - name: Wait for deployment
         if: steps.check.outputs.deploy == 'true'

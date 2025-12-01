@@ -24,12 +24,8 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = tostring(var.task_cpu)
   memory                   = tostring(var.task_memory)
 
-  # Prevent unnecessary recreation when container image changes
   lifecycle {
     create_before_destroy = true
-    ignore_changes = [
-      container_definitions
-    ]
   }
 
   container_definitions = jsonencode([{
