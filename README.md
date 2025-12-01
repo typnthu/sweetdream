@@ -1,251 +1,737 @@
-# SweetDream E-Commerce Platform
+# 🛍️ SweetDream E-Commerce Platform
 
-A full-stack e-commerce platform built with modern cloud-native architecture on AWS.
+A production-ready, cloud-native e-commerce platform built with microservices architecture on AWS. Features automated deployments, real-time analytics, and comprehensive customer behavior tracking.
+
+## 📋 Table of Contents
+
+- [Architecture](#-architecture)
+- [Features](#-features)
+- [Quick Start](#-quick-start)
+- [Project Structure](#-project-structure)
+- [API Documentation](#-api-documentation)
+- [Analytics System](#-analytics-system)
+- [Deployment](#-deployment)
+- [Development](#-development)
+- [Security](#-security)
+- [Troubleshooting](#-troubleshooting)
 
 ## 🏗️ Architecture
 
 ### Microservices
-- **Frontend**: Next.js 14 - Customer-facing web application
-- **Backend**: Express.js - Product catalog and cart management
-- **User Service**: Express.js - Authentication and user management
-- **Order Service**: Express.js - Order processing
 
-### Infrastructure
-- **Cloud**: AWS (ECS Fargate, RDS PostgreSQL, ALB, S3)
-- **IaC**: Terraform
-- **CI/CD**: GitHub Actions
-- **Monitoring**: CloudWatch with analytics export to S3
+| Service | Technology | Port | Purpose |
+|---------|-----------|------|---------|
+| **Frontend** | Next.js 14 | 3000 | Customer-facing web application |
+| **Backend** | Express.js + Prisma | 3001 | Product catalog & cart management |
+| **User Service** | Express.js + Prisma | 3003 | Authentication & user management |
+| **Order Service** | Express.js + Prisma | 3002 | Order processing & fulfillment |
+
+### AWS Infrastructure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Application Load Balancer               │
+│                    (Public-facing endpoint)                  │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+┌───────▼────────┐       ┌───────▼────────┐
+│  Public Subnet │       │  Public Subnet │
+│   (us-east-1a) │       │   (us-east-1b) │
+└───────┬────────┘       └───────┬────────┘
+        │                         │
+┌───────▼────────┐       ┌───────▼────────┐
+│ Private Subnet │       │ Private Subnet │
+│   ECS Fargate  │       │   ECS Fargate  │
+│  ┌──────────┐  │       │  ┌──────────┐  │
+│  │ Frontend │  │       │  │ Frontend │  │
+│  │ Backend  │  │       │  │ Backend  │  │
+│  │ User Svc │  │       │  │ User Svc │  │
+│  │ Order Svc│  │       │  │ Order Svc│  │
+│  └──────────┘  │       │  └──────────┘  │
+└───────┬────────┘       └───────┬────────┘
+        │                         │
+        └────────────┬────────────┘
+                     │
+            ┌────────▼────────┐
+            │  RDS PostgreSQL │
+            │  (Multi-AZ)     │
+            └─────────────────┘
+```
+
+**Key Components:**
+- **ECS Fargate**: Serverless container orchestration
+- **RDS PostgreSQL**: Managed relational database
+- **Application Load Balancer**: Traffic distribution
+- **CloudWatch**: Logging, monitoring, and analytics
+- **S3**: Analytics data storage
+- **ECR**: Container image registry
+- **AWS Cloud Map**: Service discovery
+- **Secrets Manager**: Credential management
+- **EventBridge**: Scheduled Lambda triggers
+
+## ✨ Features
+
+### 🛒 Customer Features
+- ✅ Product catalog with search and filtering
+- ✅ Shopping cart management
+- ✅ User registration and authentication
+- ✅ Order placement and tracking
+- ✅ Order history and status updates
+- ✅ Responsive design (mobile-friendly)
+
+### 👨‍💼 Admin Features
+- ✅ Order management dashboard
+- ✅ Order status updates
+- ✅ Customer analytics and insights
+- ✅ User role management
+- ✅ Real-time monitoring
+
+### 🔧 Technical Features
+- ✅ **Microservices architecture** with service discovery
+- ✅ **Auto-scaling** based on CPU/memory usage
+- ✅ **Blue-green deployments** with zero downtime
+- ✅ **Automated CI/CD** with GitHub Actions
+- ✅ **Smart change detection** (only rebuild changed services)
+- ✅ **CloudWatch Insights** for log analysis
+- ✅ **Daily analytics export** to S3 with duplicate prevention
+- ✅ **Infrastructure as Code** with Terraform
+- ✅ **Container-based** deployment
+- ✅ **Health checks** and automatic recovery
+- ✅ **Secrets management** with AWS Secrets Manager
 
 ## 🚀 Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose
+- Node.js 20+
+- AWS CLI (for cloud deployment)
+- Terraform 1.5+ (for infrastructure)
 
 ### Local Development
 
 ```bash
-# Clone and setup
+# 1. Clone repository
 git clone <repository-url>
 cd sweetdream
 
-# Copy environment files
+# 2. Setup environment files
 cp be/.env.example be/.env
 cp fe/.env.example fe/.env
 cp order-service/.env.example order-service/.env
+cp user-service/.env.example user-service/.env
 
-# Start with Docker Compose
+# 3. Start all services
 docker-compose up -d
+
+# 4. Wait for services to be ready (~30 seconds)
+docker-compose logs -f
+
+# 5. Access the application
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:3001
+# User Service: http://localhost:3003
+# Order Service: http://localhost:3002
 ```
 
-**Access**:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:3001
-- Order Service: http://localhost:3002
-- User Service: http://localhost:3003
+**Default Admin Account:**
+- Email: `admin@sweetdream.com`
+- Password: `admin123`
 
 ### AWS Deployment
 
 ```bash
-# Configure AWS
+# 1. Configure AWS credentials
 aws configure
 
-# Deploy infrastructure
+# 2. Setup Terraform
 cd terraform
 terraform init
+
+# 3. Configure variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
+# Edit terraform.tfvars with your values:
+# - db_password
+# - alert_email
+# - analytics_bucket_prefix (must be globally unique)
+
+# 4. Deploy infrastructure
+terraform plan
 terraform apply
 
-# GitHub Actions handles image builds and deployments automatically
+# 5. Push code to trigger CI/CD
+git push origin main
 ```
+
+GitHub Actions will automatically:
+- Build Docker images
+- Push to ECR
+- Deploy to ECS
+- Run health checks
 
 ## 📁 Project Structure
 
 ```
 sweetdream/
-├── be/                      # Backend service
-├── fe/                      # Frontend (Next.js)
-├── order-service/           # Order processing
-├── user-service/            # Authentication
-├── terraform/               # Infrastructure as Code
-│   └── modules/
-│       ├── vpc/
-│       ├── ecs/
-│       ├── rds/
-│       ├── alb/
-│       ├── cloudwatch-analytics/
-│       └── bastion/
-├── .github/workflows/       # CI/CD pipelines
-└── scripts/                 # Utility scripts
-    ├── set-user-role.ps1
-    └── setup-admin.ps1
+├── be/                              # Backend Service
+│   ├── src/
+│   │   ├── routes/                  # API routes
+│   │   ├── utils/                   # Utilities & loggers
+│   │   └── server.ts                # Express server
+│   ├── prisma/
+│   │   ├── schema.prisma            # Database schema
+│   │   └── seed.ts                  # Sample data
+│   ├── Dockerfile
+│   └── package.json
+│
+├── fe/                              # Frontend (Next.js)
+│   ├── src/
+│   │   ├── app/                     # App router pages
+│   │   ├── components/              # React components
+│   │   └── lib/                     # Utilities
+│   ├── public/                      # Static assets
+│   ├── Dockerfile
+│   └── package.json
+│
+├── order-service/                   # Order Service
+│   ├── src/
+│   │   ├── routes/                  # Order API routes
+│   │   └── server.ts
+│   ├── prisma/
+│   │   └── schema.prisma
+│   ├── Dockerfile
+│   └── package.json
+│
+├── user-service/                    # User Service
+│   ├── src/
+│   │   ├── routes/                  # Auth & user routes
+│   │   └── server.ts
+│   ├── prisma/
+│   │   └── schema.prisma
+│   ├── Dockerfile
+│   └── package.json
+│
+├── terraform/                       # Infrastructure as Code
+│   ├── modules/
+│   │   ├── vpc/                     # Network configuration
+│   │   ├── ecs/                     # Container orchestration
+│   │   ├── rds/                     # Database
+│   │   ├── alb/                     # Load balancer
+│   │   ├── ecr/                     # Container registry
+│   │   ├── s3/                      # Object storage
+│   │   ├── iam/                     # Permissions
+│   │   ├── cloudwatch-logs/         # Logging
+│   │   ├── cloudwatch-analytics/    # Analytics export
+│   │   ├── service-discovery/       # AWS Cloud Map
+│   │   ├── secrets-manager/         # Secrets
+│   │   └── bastion/                 # Database access
+│   ├── main.tf                      # Main configuration
+│   ├── variables.tf                 # Input variables
+│   ├── outputs.tf                   # Output values
+│   └── terraform.tfvars             # Your values (gitignored)
+│
+├── .github/workflows/               # CI/CD Pipelines
+│   ├── ci.yml                       # Continuous Integration
+│   └── deploy.yml                   # Deployment
+│
+├── scripts/                         # Utility Scripts
+│   ├── set-user-role.ps1           # Change user roles
+│   └── setup-admin.ps1             # Create admin user
+│
+├── docker-compose.yml               # Local development
+├── ANALYTICS_DEPLOYMENT_GUIDE.md    # Analytics setup
+└── README.md                        # This file
 ```
 
-## 🔑 Features
+## 📡 API Documentation
 
-### Customer
-- Product catalog with search and filtering
-- Shopping cart management
-- User authentication
-- Order placement and tracking
+### Backend Service (Port 3001)
 
-### Admin
-- Order management and status updates
-- Customer analytics dashboard
+#### Products
+```http
+GET    /api/products              # List all products
+GET    /api/products/:id          # Get product details
+GET    /api/products/search?q=    # Search products
+```
 
-### Technical
-- Microservices architecture
-- Auto-scaling with ECS Fargate
-- CloudWatch logging and monitoring
-- Daily analytics export to S3
-- Service discovery with AWS Cloud Map
+#### Cart
+```http
+POST   /api/cart                  # Add item to cart
+GET    /api/cart/:userId          # Get user's cart
+DELETE /api/cart/:id              # Remove cart item
+PATCH  /api/cart/:id              # Update cart item quantity
+```
 
-## 📊 Analytics
+#### Categories
+```http
+GET    /api/categories            # List categories
+```
 
-Customer behavior analytics with daily S3 export:
-- Product views and cart additions
-- Purchase funnel analysis
-- Best-selling products
-- Customer frequency metrics
+### User Service (Port 3003)
 
-View analytics: CloudWatch Insights or S3 exports at `s3://sweetdream-analytics-*/user-actions/`
+#### Authentication
+```http
+POST   /api/auth/register         # Register new user
+POST   /api/auth/login            # Login
+POST   /api/auth/verify           # Verify JWT token
+```
 
-## 🔐 Security
+#### Customer Management
+```http
+GET    /api/customers             # List all customers (admin)
+GET    /api/customers/:id         # Get customer details
+PATCH  /api/customers/:id/role    # Update user role (admin)
+PATCH  /api/customers/email/:email/role  # Update role by email (admin)
+```
 
-- AWS Secrets Manager for credentials
-- VPC with public/private subnets
-- Security groups for network isolation
-- IAM roles with least privilege
-- HTTPS/TLS via ALB
+### Order Service (Port 3002)
+
+#### Orders
+```http
+POST   /api/orders                # Create new order
+GET    /api/orders/user/:userId   # Get user's orders
+GET    /api/orders/:id            # Get order details
+PATCH  /api/orders/:id/status     # Update order status (admin)
+```
+
+**Order Status Flow:**
+`PENDING` → `PROCESSING` → `SHIPPED` → `DELIVERED`
+
+### Example Requests
+
+#### Register User
+```bash
+curl -X POST http://localhost:3003/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123",
+    "name": "John Doe",
+    "phone": "0123456789",
+    "address": "123 Main St"
+  }'
+```
+
+#### Login
+```bash
+curl -X POST http://localhost:3003/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123"
+  }'
+```
+
+#### Create Order
+```bash
+curl -X POST http://localhost:3002/api/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "userId": 1,
+    "items": [
+      {
+        "productId": 1,
+        "quantity": 2,
+        "size": "M",
+        "price": 299000
+      }
+    ],
+    "totalAmount": 598000,
+    "shippingAddress": "123 Main St"
+  }'
+```
+
+## 📊 Analytics System
+
+### Overview
+
+The platform includes a comprehensive analytics system that tracks customer behavior and exports data to S3 for analysis.
+
+### Tracked Events
+
+| Event | Service | Data Captured |
+|-------|---------|---------------|
+| **Product Viewed** | Backend | productId, productName, price, category |
+| **Product Search** | Backend | searchQuery, resultsCount |
+| **Add to Cart** | Backend | productId, quantity, size, price |
+| **Checkout Started** | Frontend | cartTotal, itemCount |
+| **Order Completed** | Order Service | orderId, products, totalAmount, userId |
+
+### Data Export
+
+**Automated Daily Export:**
+- Runs at **midnight Vietnam time** (17:00 UTC)
+- Exports to S3 in JSON format
+- Organized by date: `s3://bucket/user-actions/year=2024/month=12/day=02/`
+- **Automatic duplicate prevention** when run multiple times
+
+**Manual Export:**
+```bash
+# Test export (exports today's logs)
+aws lambda invoke \
+  --function-name sweetdream-service-backend-export-logs \
+  --payload '{"test_mode": true}' \
+  response.json
+
+# Check result
+cat response.json | jq .
+```
+
+### CloudWatch Insights Queries
+
+Pre-configured queries available in AWS Console:
+
+1. **Product Views by User** - Most viewed products
+2. **Cart Additions** - Products added to cart
+3. **Purchases** - Completed orders with revenue
+4. **Customer Frequency** - Repeat customer analysis
+5. **Best Sellers** - Top-selling products
+6. **Category Performance** - Sales by category
+7. **Conversion Funnel** - View → Cart → Checkout → Order
+
+### Duplicate Prevention
+
+The Lambda function automatically prevents duplicates:
+- Each log gets a unique ID based on content
+- Merges with existing S3 data before writing
+- Tracks export history in metadata files
+- **Safe to run multiple times per day**
+
+See `ANALYTICS_DEPLOYMENT_GUIDE.md` and `terraform/modules/cloudwatch-analytics/DUPLICATE_PREVENTION.md` for details.
+
+## 🚢 Deployment
+
+### Automated CI/CD (GitHub Actions)
+
+**Triggers:**
+- Push to `main` branch → Production deployment
+- Push to `dev` branch → Development deployment
+- Pull requests → Run tests only
+
+**Pipeline Steps:**
+
+1. **Change Detection**
+   - Analyzes git diff
+   - Identifies changed services
+   - Skips unchanged services
+
+2. **Parallel Builds**
+   - Builds only changed services
+   - Pushes to ECR
+   - Tags with git SHA
+
+3. **ECS Deployment**
+   - Updates task definitions
+   - Triggers rolling updates
+   - Waits for health checks
+
+4. **Verification**
+   - Checks service stability
+   - Monitors CloudWatch logs
+
+**Deployment Time:**
+- Single service: ~5-8 minutes
+- All services: ~10-15 minutes
+
+### Manual Deployment
+
+```bash
+# Build and push specific service
+cd be
+docker build -t sweetdream-backend .
+docker tag sweetdream-backend:latest <account-id>.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest
+docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest
+
+# Update ECS service
+aws ecs update-service \
+  --cluster sweetdream-cluster \
+  --service sweetdream-service-backend \
+  --force-new-deployment
+```
+
+### Blue-Green Deployment
+
+The ALB uses weighted target groups for gradual rollouts:
+- Blue (current): 20% traffic
+- Green (new): 40% traffic
+- Canary testing before full rollout
+
+Configure in `terraform/modules/alb/main.tf`.
 
 ## 🛠️ Development
 
 ### Database Migrations
+
 ```bash
+# Backend service
 cd be
-npx prisma migrate dev
+npx prisma migrate dev --name migration_name
 npx prisma generate
 npm run seed
+
+# User service
+cd user-service
+npx prisma migrate dev --name migration_name
+npx prisma generate
+
+# Order service
+cd order-service
+npx prisma migrate dev --name migration_name
+npx prisma generate
 ```
 
-### Admin Setup
+### Admin User Setup
 
-Admin user is **automatically created** on container startup:
-- Email: `admin@sweetdream.com`
-- Password: `admin123`
+**Automatic (Recommended):**
+Admin user is created automatically on container startup.
 
-No manual steps required! Just run:
-```bash
-docker-compose up -d --build
+**Manual (if needed):**
+```powershell
+.\scripts\setup-admin.ps1
 ```
 
 ### User Role Management
-```bash
-# Change user role
+
+```powershell
+# Promote user to admin
 .\scripts\set-user-role.ps1 -Email "user@example.com" -Role "ADMIN"
-.\scripts\set-user-role.ps1 -Email "user@example.com" -Role "CUSTOMER"
+
+# Demote admin to customer
+.\scripts\set-user-role.ps1 -Email "admin@example.com" -Role "CUSTOMER"
 ```
 
-Note: Users must log in again after role changes to receive a new token with updated permissions.
+**Note:** Users must log in again after role changes.
 
-### Testing
+### Running Tests
+
 ```bash
 # Backend
 cd be && npm test
 
 # Frontend
 cd fe && npm test
+
+# All services
+docker-compose run backend npm test
+docker-compose run frontend npm test
 ```
 
-## 📝 API Endpoints
+### Code Quality
 
-### Backend (3001)
-- `GET /api/products` - List products
-- `GET /api/products/:id` - Product details
-- `POST /api/cart` - Add to cart
-- `GET /api/cart/:userId` - Get cart
-
-### User Service (3003)
-- `POST /api/auth/register` - Register
-- `POST /api/auth/login` - Login
-- `POST /api/auth/verify` - Verify token
-- `GET /api/customers` - List customers
-- `GET /api/customers/:id` - Get customer
-- `PATCH /api/customers/:id/role` - Update role (admin)
-- `PATCH /api/customers/email/:email/role` - Update role by email (admin)
-
-### Order Service (3002)
-- `POST /api/orders` - Create order
-- `GET /api/orders/user/:userId` - User orders
-- `PATCH /api/orders/:id/status` - Update status
-
-## 🚢 Deployment
-
-### Automated (GitHub Actions)
-Push to `main` or `dev` branch triggers:
-1. Smart change detection
-2. Parallel service builds
-3. ECR image push
-4. ECS deployment
-
-See `.github/workflows/README.md` for details.
-
-### Manual Scripts
-```powershell
-# Setup admin user (if needed)
-.\scripts\setup-admin.ps1
-
-# Change user role
-.\scripts\set-user-role.ps1 -Email "user@example.com" -Role "ADMIN"
-```
-
-## 🔧 Troubleshooting
-
-### View logs
 ```bash
+# Lint
+npm run lint
+
+# Format
+npm run format
+
+# Type check
+npm run type-check
+```
+
+## 🔐 Security
+
+### Network Security
+- ✅ VPC with public/private subnets
+- ✅ Security groups with least privilege
+- ✅ Private subnets for ECS and RDS
+- ✅ NAT Gateway for outbound traffic
+- ✅ HTTPS/TLS via ALB
+
+### Application Security
+- ✅ JWT-based authentication
+- ✅ Password hashing with bcrypt
+- ✅ Role-based access control (RBAC)
+- ✅ Input validation and sanitization
+- ✅ SQL injection prevention (Prisma ORM)
+
+### AWS Security
+- ✅ IAM roles with least privilege
+- ✅ Secrets Manager for credentials
+- ✅ Encrypted S3 buckets (AES-256)
+- ✅ Encrypted RDS storage
+- ✅ CloudWatch audit logs
+
+### Best Practices
+- ✅ No hardcoded credentials
+- ✅ Environment-based configuration
+- ✅ Regular security updates
+- ✅ Automated vulnerability scanning
+
+## 🔍 Troubleshooting
+
+### View Logs
+
+```bash
+# Backend service
 aws logs tail /ecs/sweetdream-sweetdream-service-backend --follow
+
+# Frontend service
+aws logs tail /ecs/sweetdream-sweetdream-service-frontend --follow
+
+# Order service
+aws logs tail /ecs/sweetdream-sweetdream-service-order-service --follow
+
+# User service
+aws logs tail /ecs/sweetdream-sweetdream-service-user-service --follow
+
+# Lambda export function
+aws logs tail /aws/lambda/sweetdream-service-backend-export-logs --follow
 ```
 
-### Check service status
+### Check Service Health
+
 ```bash
-aws ecs describe-services --cluster sweetdream-cluster --services sweetdream-service-backend
+# List all services
+aws ecs list-services --cluster sweetdream-cluster
+
+# Describe specific service
+aws ecs describe-services \
+  --cluster sweetdream-cluster \
+  --services sweetdream-service-backend
+
+# Check task status
+aws ecs list-tasks --cluster sweetdream-cluster --service-name sweetdream-service-backend
 ```
 
-### Database access
+### Database Access
+
 ```bash
-# Enable bastion in terraform.tfvars
+# Enable bastion host
+# Edit terraform/terraform.tfvars:
 enable_bastion = true
-terraform apply
 
-# Connect
+# Apply changes
+cd terraform && terraform apply
+
+# Connect via SSM
 aws ssm start-session --target <bastion-instance-id>
+
+# Inside bastion, connect to RDS
+psql -h <rds-endpoint> -U dbadmin -d sweetdream
 ```
 
-## 📦 Environment Variables
+### Common Issues
 
-### Backend
-```env
-DATABASE_URL=postgresql://user:password@host:5432/database
-PORT=3001
-NODE_ENV=production
+**Issue: Service won't start**
+```bash
+# Check task logs
+aws ecs describe-tasks --cluster sweetdream-cluster --tasks <task-id>
+
+# Check CloudWatch logs for errors
+aws logs tail /ecs/sweetdream-sweetdream-service-backend --since 10m
 ```
 
-### Frontend
-```env
-NEXT_PUBLIC_BACKEND_URL=http://backend-url:3001
-NEXT_PUBLIC_USER_SERVICE_URL=http://user-service-url:3003
-NEXT_PUBLIC_ORDER_SERVICE_URL=http://order-service-url:3002
+**Issue: Database connection failed**
+```bash
+# Verify security group rules
+aws ec2 describe-security-groups --group-ids <rds-sg-id>
+
+# Test connectivity from ECS task
+aws ecs execute-command \
+  --cluster sweetdream-cluster \
+  --task <task-id> \
+  --container sweetdream-backend \
+  --interactive \
+  --command "/bin/sh"
 ```
+
+**Issue: Analytics not exporting**
+```bash
+# Check Lambda logs
+aws logs tail /aws/lambda/sweetdream-service-backend-export-logs --follow
+
+# Verify EventBridge rule
+aws events list-rules --name-prefix sweetdream
+
+# Test Lambda manually
+aws lambda invoke \
+  --function-name sweetdream-service-backend-export-logs \
+  --payload '{"test_mode": true}' \
+  response.json
+```
+
+## 📈 Monitoring
+
+### CloudWatch Dashboards
+
+Access via AWS Console → CloudWatch → Dashboards
+
+**Metrics to Monitor:**
+- ECS CPU/Memory utilization
+- ALB request count and latency
+- RDS connections and queries
+- Lambda invocations and errors
+- S3 storage usage
+
+### Alarms
+
+Configured alarms (sent to `alert_email`):
+- High CPU usage (>80%)
+- High memory usage (>80%)
+- Service unhealthy targets
+- RDS storage low
+- Lambda errors
+
+### Cost Monitoring
+
+**Estimated Monthly Costs:**
+- ECS Fargate: $50-100 (4 services, 2 tasks each)
+- RDS PostgreSQL: $30-50 (db.t3.micro)
+- ALB: $20-30
+- S3: $1-5
+- CloudWatch: $5-10
+- Data Transfer: $10-20
+- **Total: ~$120-220/month**
+
+Use AWS Cost Explorer to track actual costs.
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch (`git checkout -b feature/name`)
-3. Commit changes (`git commit -m 'Add feature'`)
-4. Push to branch (`git push origin feature/name`)
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
 5. Open Pull Request
+
+### Coding Standards
+- Use TypeScript for type safety
+- Follow ESLint configuration
+- Write meaningful commit messages
+- Add tests for new features
+- Update documentation
 
 ## 📄 License
 
-MIT License
+MIT License - see LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- Next.js team for the amazing framework
+- AWS for cloud infrastructure
+- Prisma for the excellent ORM
+- All open-source contributors
 
 ---
 
-**Note**: Demo project. Ensure proper security, monitoring, and backups for production use.
+## 📞 Support
+
+For issues and questions:
+- Open an issue on GitHub
+- Check existing documentation
+- Review CloudWatch logs
+
+**Note:** This is a demo project. For production use, ensure proper:
+- Security hardening
+- Backup strategies
+- Disaster recovery plans
+- Performance optimization
+- Cost optimization
+- Compliance requirements
+
+---
+
+**Built with ❤️ for learning cloud-native architecture**

@@ -32,14 +32,14 @@ module "alb" {
   vpc_id                = module.vpc.vpc_id
   public_subnet_ids     = module.vpc.public_subnets
   ecs_security_group_id = module.vpc.ecs_security_group_id
-  
+
   # Blue/Green deployment weights (20-40-40 split)
-  frontend_blue_weight        = 20
-  frontend_green_weight       = 40
-  user_service_blue_weight    = 20
-  user_service_green_weight   = 40
-  order_service_blue_weight   = 20
-  order_service_green_weight  = 40
+  frontend_blue_weight       = 20
+  frontend_green_weight      = 40
+  user_service_blue_weight   = 20
+  user_service_green_weight  = 40
+  order_service_blue_weight  = 20
+  order_service_green_weight = 40
 }
 
 module "secrets_manager" {
