@@ -1,4 +1,5 @@
 #main.tf
+# Analytics enabled via GitHub variables
 
 # ===== ECR Repositories (must be created first) =====
 module "ecr" {
