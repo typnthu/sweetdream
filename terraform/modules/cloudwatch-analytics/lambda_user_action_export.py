@@ -2,6 +2,7 @@
 """
 User Action Log Export Lambda
 Filters and exports only user_action logs to S3 in JSON/CSV format
+WITH DUPLICATE PREVENTION
 """
 
 import boto3
@@ -9,8 +10,9 @@ import json
 import os
 import csv
 import io
+import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import time
 
 # AWS clients
