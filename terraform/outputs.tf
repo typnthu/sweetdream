@@ -68,7 +68,33 @@ output "s3_bucket_name" {
 }
 
 
-# ECR Image URIs (Dynamically Retrieved)
+# ECR Repositories
+output "ecr_repositories" {
+  description = "ECR repository URLs"
+  value       = module.ecr.all_repository_urls
+}
+
+output "ecr_backend_repository" {
+  description = "Backend ECR repository URL"
+  value       = module.ecr.backend_repository_url
+}
+
+output "ecr_frontend_repository" {
+  description = "Frontend ECR repository URL"
+  value       = module.ecr.frontend_repository_url
+}
+
+output "ecr_user_service_repository" {
+  description = "User Service ECR repository URL"
+  value       = module.ecr.user_service_repository_url
+}
+
+output "ecr_order_service_repository" {
+  description = "Order Service ECR repository URL"
+  value       = module.ecr.order_service_repository_url
+}
+
+# ECR Image URIs (with :latest tag)
 output "ecr_backend_image" {
   description = "Backend Docker image URI"
   value       = local.backend_image

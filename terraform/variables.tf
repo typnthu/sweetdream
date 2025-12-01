@@ -63,7 +63,7 @@ variable "s3_bucket_name" {
 variable "alert_email" {
   description = "Email address for CloudWatch alarm notifications"
   type        = string
-  default     = "user@example.com"
+  default     = "dtminhthu19022004@gmail.com"
 }
 
 variable "environment" {
@@ -96,16 +96,17 @@ variable "analytics_bucket_prefix" {
   default     = "sweetdream-analytics"
 }
 
-# Blue/Green Deployment
-variable "traffic_distribution" {
-  description = "Blue/Green deployment: 'blue' (current production) or 'green' (new version)"
-  type        = string
-  default     = "blue"
+# Deployment Configuration
+variable "deployment_minimum_healthy_percent" {
+  description = "Minimum healthy percent during deployment"
+  type        = number
+  default     = 50
+}
 
-  validation {
-    condition     = contains(["blue", "green"], var.traffic_distribution)
-    error_message = "Must be either 'blue' or 'green' for blue/green deployment"
-  }
+variable "deployment_maximum_percent" {
+  description = "Maximum percent during deployment"
+  type        = number
+  default     = 200
 }
 
 variable "enable_bastion" {

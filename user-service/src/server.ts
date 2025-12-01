@@ -85,15 +85,19 @@ app.post('/api/auth/register', async (req, res) => {
       data: {
         name,
         email,
+        password: hashedPassword,
         phone: phone || null,
-        address: address || null,
-        // Note: Add password field to schema if you want to store it
+        address: address || null
       }
     });
 
-    // Generate JWT token
+    // Generate JWT token with role (lowercase for frontend compatibility)
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { 
+        userId: user.id, 
+        email: user.email,
+        role: user.role.toLowerCase() // Convert ADMIN/CUSTOMER to admin/customer
+      },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '7d' }
     );
@@ -139,15 +143,22 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // For demo: accept any password (in production, verify hashed password)
-    // const isValidPassword = await bcrypt.compare(password, user.password);
-    // if (!isValidPassword) {
-    //   return res.status(401).json({ error: 'Invalid credentials' });
-    // }
+    // Verify password
+    if (user.password) {
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+    }
+    // If no password stored (legacy users), accept any password for backward compatibility
 
-    // Generate JWT token
+    // Generate JWT token with role (lowercase for frontend compatibility)
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { 
+        userId: user.id, 
+        email: user.email,
+        role: user.role.toLowerCase() // Convert ADMIN/CUSTOMER to admin/customer
+      },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '7d' }
     );
@@ -200,7 +211,7 @@ app.post('/api/auth/verify', async (req, res) => {
         email: user.email,
         phone: user.phone,
         address: user.address,
-        role: user.role.toLowerCase() // Convert ADMIN/CUSTOMER to admin/customer
+        role: user.role // Return role from database
       }
     });
   } catch (error) {
@@ -364,6 +375,78 @@ app.put('/api/customers/:id', async (req, res) => {
       return res.status(404).json({ error: 'Customer not found' });
     }
     res.status(500).json({ error: 'Failed to update customer' });
+  }
+});
+
+// Update customer role (admin only)
+app.patch('/api/customers/:id/role', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    // Validate role
+    if (!role || !['CUSTOMER', 'ADMIN'].includes(role.toUpperCase())) {
+      return res.status(400).json({ 
+        error: 'Invalid role. Must be CUSTOMER or ADMIN' 
+      });
+    }
+
+    const customer = await prisma.customer.update({
+      where: { id: parseInt(id) },
+      data: { role: role.toUpperCase() as 'CUSTOMER' | 'ADMIN' }
+    });
+
+    res.json({
+      message: 'Role updated successfully',
+      customer: {
+        id: customer.id,
+        email: customer.email,
+        name: customer.name,
+        role: customer.role
+      }
+    });
+  } catch (error: any) {
+    console.error('Error updating role:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
+// Update customer role by email (admin only)
+app.patch('/api/customers/email/:email/role', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { role } = req.body;
+
+    // Validate role
+    if (!role || !['CUSTOMER', 'ADMIN'].includes(role.toUpperCase())) {
+      return res.status(400).json({ 
+        error: 'Invalid role. Must be CUSTOMER or ADMIN' 
+      });
+    }
+
+    const customer = await prisma.customer.update({
+      where: { email },
+      data: { role: role.toUpperCase() as 'CUSTOMER' | 'ADMIN' }
+    });
+
+    res.json({
+      message: 'Role updated successfully',
+      customer: {
+        id: customer.id,
+        email: customer.email,
+        name: customer.name,
+        role: customer.role
+      }
+    });
+  } catch (error: any) {
+    console.error('Error updating role:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    res.status(500).json({ error: 'Failed to update role' });
   }
 });
 

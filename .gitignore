@@ -35,6 +35,7 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/terraform.tfstate.*.backup
 terraform/tfplan
+terraform/terraform.tfvars
 *.tfstate
 *.tfstate.*
 !terraform/backend.tf
@@ -62,11 +63,6 @@ coverage/
 prisma/migrations/
 
 # Docker
-
-
-# Local development scripts and test data
-be/export-products.js
-be/view-products.js
 
 # Analytics documentation (keep locally, not in repo)
 analytics-data/

@@ -2,12 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main, master, dev]  # Support both main and master
+    branches: [master, dev]
   pull_request:
-    branches: [main, master, dev]
+    branches: [master, dev]
 
 env:
   NODE_VERSION: '20'
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   # Detect what changed to run only necessary jobs
@@ -75,21 +79,19 @@ jobs:
       
       - name: Lint
         working-directory: be
-        run: npm run lint || true
-        continue-on-error: true
+        run: npm run lint
       
-      - name: Migrate & Test
+      - name: Run Tests
         working-directory: be
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sweetdream_test
         run: |
           npx prisma migrate deploy
-          npm test || true
-        continue-on-error: true
+          npm test
       
       - name: Security Audit
         working-directory: be
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=moderate
         continue-on-error: true
 
   # Frontend CI
@@ -117,12 +119,16 @@ jobs:
       
       - name: Lint
         working-directory: fe
-        run: npm run lint || true
+        run: npm run lint
+      
+      - name: Type Check
+        working-directory: fe
+        run: npx tsc --noEmit
         continue-on-error: true
       
       - name: Security Audit
         working-directory: fe
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=moderate
         continue-on-error: true
 
   # Order Service CI

@@ -1,59 +1,55 @@
-# Production Dockerfile
+# ===== Stage 1: Builder =====
 FROM node:20-alpine AS builder
-
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files first (to leverage Docker caching)
 COPY package*.json ./
+COPY prisma ./prisma/
 
-# Install ALL dependencies (including devDependencies for build)
-RUN npm ci
+# Install ALL dependencies (including devDependencies)
+RUN npm install
 
-# Copy prisma schema
-COPY prisma ./prisma
+# Copy rest of the source code
+COPY . .
 
-# Generate Prisma client
+# Generate Prisma client (before build)
 RUN npx prisma generate
-
-# Copy tsconfig and source
-COPY tsconfig.json ./
-COPY src ./src
 
 # Build TypeScript
 RUN npm run build
 
-# Production stage
-FROM node:20-alpine
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
+# ===== Stage 2: Production =====
+FROM node:20-alpine AS production
+
+# Install dumb-init and openssl for Prisma
+RUN apk add --no-cache dumb-init openssl
+
+# Create app user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy only necessary files from builder
+COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/package*.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+COPY --chown=nextjs:nodejs startup.sh ./startup.sh
 
-# Install only production dependencies
-RUN npm ci --only=production
+RUN chmod +x startup.sh
 
-# Copy prisma schema
-COPY prisma ./prisma
+USER nextjs
 
-# Generate Prisma client
-RUN npx prisma generate
-
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-
-# Expose port
 EXPOSE 3002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
+  CMD node -e "require('http').get('http://localhost:3002/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
-# Start application (production mode)
-CMD ["npm", "start"]
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["./startup.sh"]

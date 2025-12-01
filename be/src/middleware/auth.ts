@@ -16,11 +16,11 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
       return res.status(403).json({ error: 'Invalid token', details: err.message });
     }
     // User-service uses 'userId', map it to 'id' for consistency
+    // Trust the role from the token (set by user-service)
     (req as any).user = {
       id: decoded.userId || decoded.id,
       email: decoded.email,
-      // HARDCODED: admin@sweetdream.com is always ADMIN
-      role: decoded.email === 'admin@sweetdream.com' ? 'ADMIN' : (decoded.role || 'CUSTOMER')
+      role: decoded.role || 'CUSTOMER'
     };
     next();
   });

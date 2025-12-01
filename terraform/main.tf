@@ -1,4 +1,11 @@
 #main.tf
+
+# ===== ECR Repositories (must be created first) =====
+module "ecr" {
+  source      = "./modules/ecr"
+  environment = var.environment
+}
+
 module "vpc" {
   source     = "./modules/vpc"
   vpc_cidr   = var.vpc_cidr

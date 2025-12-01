@@ -2,7 +2,7 @@ name: PR Checks
 
 on:
   pull_request:
-    branches: [main, master, dev]  # Support both main and master
+    branches: [master, dev]
 
 jobs:
   # Quick validation checks

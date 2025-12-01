@@ -74,9 +74,8 @@ sweetdream/
 │       └── bastion/
 ├── .github/workflows/       # CI/CD pipelines
 └── scripts/                 # Utility scripts
-    ├── force-deploy.ps1
-    ├── make-user-admin.ps1
-    └── test-user-action-export.ps1
+    ├── set-user-role.ps1
+    └── setup-admin.ps1
 ```
 
 ## 🔑 Features
@@ -126,6 +125,26 @@ npx prisma generate
 npm run seed
 ```
 
+### Admin Setup
+
+Admin user is **automatically created** on container startup:
+- Email: `admin@sweetdream.com`
+- Password: `admin123`
+
+No manual steps required! Just run:
+```bash
+docker-compose up -d --build
+```
+
+### User Role Management
+```bash
+# Change user role
+.\scripts\set-user-role.ps1 -Email "user@example.com" -Role "ADMIN"
+.\scripts\set-user-role.ps1 -Email "user@example.com" -Role "CUSTOMER"
+```
+
+Note: Users must log in again after role changes to receive a new token with updated permissions.
+
 ### Testing
 ```bash
 # Backend
@@ -146,7 +165,11 @@ cd fe && npm test
 ### User Service (3003)
 - `POST /api/auth/register` - Register
 - `POST /api/auth/login` - Login
-- `GET /api/auth/me` - Current user
+- `POST /api/auth/verify` - Verify token
+- `GET /api/customers` - List customers
+- `GET /api/customers/:id` - Get customer
+- `PATCH /api/customers/:id/role` - Update role (admin)
+- `PATCH /api/customers/email/:email/role` - Update role by email (admin)
 
 ### Order Service (3002)
 - `POST /api/orders` - Create order
@@ -166,14 +189,11 @@ See `.github/workflows/README.md` for details.
 
 ### Manual Scripts
 ```powershell
-# Force deploy all services
-.\scripts\force-deploy.ps1
+# Setup admin user (if needed)
+.\scripts\setup-admin.ps1
 
-# Make user admin
-.\scripts\make-user-admin.ps1 -Email user@example.com
-
-# Test analytics export
-.\scripts\test-user-action-export.ps1 -Service backend
+# Change user role
+.\scripts\set-user-role.ps1 -Email "user@example.com" -Role "ADMIN"
 ```
 
 ## 🔧 Troubleshooting
