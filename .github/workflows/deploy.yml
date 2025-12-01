@@ -144,10 +144,10 @@ jobs:
         run: |
           if [[ "${{ matrix.service.changed }}" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
-            echo "✅ Deploying ${{ matrix.service.name }}" >> $GITHUB_STEP_SUMMARY
+            echo " Deploying ${{ matrix.service.name }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
-            echo "⏭️ Skipping ${{ matrix.service.name }} (no changes)" >> $GITHUB_STEP_SUMMARY
+            echo " Skipping ${{ matrix.service.name }} (no changes)" >> $GITHUB_STEP_SUMMARY
           fi
       
       - uses: actions/checkout@v4
@@ -199,38 +199,37 @@ jobs:
           docker push $IMAGE_NAME:latest
           docker push $IMAGE_NAME:$IMAGE_TAG
           
-          echo " Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
       
-      - name: Update ECS Task Definition
+      - name: Get Current Task Definition
         if: steps.check.outputs.deploy == 'true'
+        id: task-def
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           TASK_FAMILY="sweetdream-task-${{ matrix.service.name }}"
           IMAGE_NAME=$ECR_REGISTRY/sweetdream-${{ matrix.service.name }}:latest
           
-          # Get current task definition
-          TASK_DEF=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY)
+          # Get current task definition and update image
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY --query 'taskDefinition')
           
-          # Create new task definition with updated image
+          # Update image and clean up AWS-managed fields
           NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_NAME" '
-            .taskDefinition |
             .containerDefinitions[0].image = $IMAGE |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
           ')
           
           # Register new task definition
-          NEW_REVISION=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" | jq -r '.taskDefinition.taskDefinitionArn')
+          aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" > /dev/null
           
-          echo " Registered new task definition: $NEW_REVISION" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Updated task definition with new image" >> $GITHUB_STEP_SUMMARY
       
       - name: Deploy to ECS
         if: steps.check.outputs.deploy == 'true'
         run: |
           SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
           
-          echo "Deploying $SERVICE_NAME..."
+          echo "🚀 Deploying $SERVICE_NAME..."
           
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
@@ -238,21 +237,21 @@ jobs:
             --force-new-deployment \
             --no-cli-pager
           
-          echo "$SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
+          echo "✅ $SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
       
       - name: Wait for deployment
         if: steps.check.outputs.deploy == 'true'
         run: |
           SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
           
-          echo "Waiting for $SERVICE_NAME to stabilize..."
+          echo "⏳ Waiting for $SERVICE_NAME to stabilize..."
           
           aws ecs wait services-stable \
             --cluster ${{ env.ECS_CLUSTER }} \
             --services $SERVICE_NAME \
             --no-cli-pager
           
-          echo "$SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
+          echo "✅ $SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
 
   # Deployment summary
   summary:
