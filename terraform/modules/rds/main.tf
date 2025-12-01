@@ -1,10 +1,14 @@
 # DB Subnet Group
 resource "aws_db_subnet_group" "main" {
-  name       = "sweetdream-db-subnet-group"
+  name       = "sweetdream-db-subnet-group-${substr(md5(join(",", var.private_subnet_ids)), 0, 8)}"
   subnet_ids = var.private_subnet_ids
 
   tags = {
     Name = "SweetDream DB Subnet Group"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -31,12 +35,17 @@ resource "aws_db_instance" "postgres" {
   maintenance_window      = "mon:04:00-mon:05:00"
 
   skip_final_snapshot       = true
-  final_snapshot_identifier = "sweetdream-db-final-snapshot"
+  final_snapshot_identifier = "sweetdream-db-final-snapshot-${formatdate("YYYY-MM-DD-hhmm", timestamp())}"
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
   tags = {
     Name        = "SweetDream PostgreSQL"
     Environment = "production"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes        = [final_snapshot_identifier]
   }
 }
