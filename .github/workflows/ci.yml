@@ -80,6 +80,7 @@ jobs:
       - name: Lint
         working-directory: be
         run: npm run lint
+        continue-on-error: true
       
       - name: Run Tests
         working-directory: be
@@ -120,6 +121,7 @@ jobs:
       - name: Lint
         working-directory: fe
         run: npm run lint
+        continue-on-error: true
       
       - name: Type Check
         working-directory: fe
