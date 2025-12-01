@@ -100,9 +100,9 @@ jobs:
         run: |
           terraform apply -auto-approve tfplan
           
-          echo "## 🏗️ Infrastructure Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "## Infrastructure Deployed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ VPC, ECS Cluster, RDS, ALB, and all modules deployed" >> $GITHUB_STEP_SUMMARY
+          echo " VPC, ECS Cluster, RDS, ALB, and all modules deployed" >> $GITHUB_STEP_SUMMARY
 
   # Build and deploy services
   deploy-services:
@@ -199,14 +199,38 @@ jobs:
           docker push $IMAGE_NAME:latest
           docker push $IMAGE_NAME:$IMAGE_TAG
           
-          echo "✅ Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+          echo " Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Update ECS Task Definition
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          TASK_FAMILY="sweetdream-task-${{ matrix.service.name }}"
+          IMAGE_NAME=$ECR_REGISTRY/sweetdream-${{ matrix.service.name }}:latest
+          
+          # Get current task definition
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY)
+          
+          # Create new task definition with updated image
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_NAME" '
+            .taskDefinition |
+            .containerDefinitions[0].image = $IMAGE |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+          ')
+          
+          # Register new task definition
+          NEW_REVISION=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" | jq -r '.taskDefinition.taskDefinitionArn')
+          
+          echo " Registered new task definition: $NEW_REVISION" >> $GITHUB_STEP_SUMMARY
       
       - name: Deploy to ECS
         if: steps.check.outputs.deploy == 'true'
         run: |
           SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
           
-          echo "🚀 Deploying $SERVICE_NAME..."
+          echo "Deploying $SERVICE_NAME..."
           
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
@@ -214,21 +238,21 @@ jobs:
             --force-new-deployment \
             --no-cli-pager
           
-          echo "✅ $SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
+          echo "$SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
       
       - name: Wait for deployment
         if: steps.check.outputs.deploy == 'true'
         run: |
           SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
           
-          echo "⏳ Waiting for $SERVICE_NAME to stabilize..."
+          echo "Waiting for $SERVICE_NAME to stabilize..."
           
           aws ecs wait services-stable \
             --cluster ${{ env.ECS_CLUSTER }} \
             --services $SERVICE_NAME \
             --no-cli-pager
           
-          echo "✅ $SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
+          echo "$SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
 
   # Deployment summary
   summary:
@@ -264,10 +288,10 @@ jobs:
       
       - name: Create Summary
         run: |
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "##Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### 📊 Status" >> $GITHUB_STEP_SUMMARY
+          echo "###Status" >> $GITHUB_STEP_SUMMARY
           echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Infrastructure | ${{ needs.deploy-infrastructure.result }} |" >> $GITHUB_STEP_SUMMARY
@@ -277,14 +301,14 @@ jobs:
           echo "| User Service | ${{ steps.info.outputs.user-service_status }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### 🌐 Access" >> $GITHUB_STEP_SUMMARY
+          echo "### Access" >> $GITHUB_STEP_SUMMARY
           echo "- **Application URL**: http://${{ steps.info.outputs.alb_url }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### 📦 Changes Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "### Changes Deployed" >> $GITHUB_STEP_SUMMARY
           echo "- Backend: ${{ needs.changes.outputs.backend == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
           echo "- Frontend: ${{ needs.changes.outputs.frontend == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
           echo "- Order Service: ${{ needs.changes.outputs.order-service == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
