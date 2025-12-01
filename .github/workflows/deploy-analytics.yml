@@ -1,0 +1,226 @@
+name: Deploy Analytics Lambda
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy-and-redeploy
+        default: 'deploy'
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: '1.6.0'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-analytics:
+    name: Deploy Analytics Lambda
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Destroy existing resources (if requested)
+        if: github.event.inputs.action == 'destroy-and-redeploy'
+        run: |
+          echo "🗑️ Destroying existing analytics resources..."
+          
+          # Delete IAM roles manually (Terraform can't destroy if they exist outside state)
+          aws iam delete-role-policy \
+            --role-name sweetdream-service-backend-export-lambda-role \
+            --policy-name sweetdream-service-backend-export-lambda-policy \
+            2>/dev/null || true
+          
+          aws iam delete-role \
+            --role-name sweetdream-service-backend-export-lambda-role \
+            2>/dev/null || true
+          
+          aws iam delete-role-policy \
+            --role-name sweetdream-service-order-service-export-lambda-role \
+            --policy-name sweetdream-service-order-service-export-lambda-policy \
+            2>/dev/null || true
+          
+          aws iam delete-role \
+            --role-name sweetdream-service-order-service-export-lambda-role \
+            2>/dev/null || true
+          
+          # Delete Lambda functions
+          aws lambda delete-function \
+            --function-name sweetdream-service-backend-export-logs \
+            2>/dev/null || true
+          
+          aws lambda delete-function \
+            --function-name sweetdream-service-order-service-export-logs \
+            2>/dev/null || true
+          
+          # Delete EventBridge rules
+          aws events remove-targets \
+            --rule sweetdream-service-backend-daily-export \
+            --ids ExportLambda \
+            2>/dev/null || true
+          
+          aws events delete-rule \
+            --name sweetdream-service-backend-daily-export \
+            2>/dev/null || true
+          
+          aws events remove-targets \
+            --rule sweetdream-service-order-service-daily-export \
+            --ids ExportLambda \
+            2>/dev/null || true
+          
+          aws events delete-rule \
+            --name sweetdream-service-order-service-daily-export \
+            2>/dev/null || true
+          
+          # Delete CloudWatch query definitions
+          QUERIES=$(aws logs describe-query-definitions \
+            --query 'queryDefinitions[?contains(name, `sweetdream-service`)].queryDefinitionId' \
+            --output text)
+          
+          for query_id in $QUERIES; do
+            echo "Deleting query: $query_id"
+            aws logs delete-query-definition --query-definition-id "$query_id" 2>/dev/null || true
+          done
+          
+          echo "✅ Cleanup complete"
+      
+      - name: Wait for cleanup
+        if: github.event.inputs.action == 'destroy-and-redeploy'
+        run: sleep 10
+      
+      - name: Terraform Plan (Analytics only)
+        run: |
+          terraform plan \
+            -target=module.backend_analytics \
+            -target=module.order_analytics \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
+            -var="enable_customer_analytics=true" \
+            -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
+            -var="analytics_bucket_prefix=${{ vars.ANALYTICS_BUCKET_PREFIX || 'sweetdream-analytics' }}" \
+            -out=tfplan-analytics
+      
+      - name: Terraform Apply (Analytics only)
+        run: |
+          terraform apply -auto-approve tfplan-analytics
+          
+          echo "## ✅ Analytics Lambda Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Verify Lambda Functions
+        run: |
+          echo "🔍 Verifying Lambda functions..."
+          
+          BACKEND_LAMBDA=$(aws lambda get-function \
+            --function-name sweetdream-service-backend-export-logs \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          ORDER_LAMBDA=$(aws lambda get-function \
+            --function-name sweetdream-service-order-service-export-logs \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          echo "### Lambda Functions" >> $GITHUB_STEP_SUMMARY
+          echo "| Function | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Export | $BACKEND_LAMBDA |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Export | $ORDER_LAMBDA |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Verify S3 Buckets
+        run: |
+          echo "📦 Verifying S3 buckets..."
+          
+          BACKEND_BUCKET=$(aws s3 ls | grep sweetdream-analytics.*backend || echo "NOT_FOUND")
+          ORDER_BUCKET=$(aws s3 ls | grep sweetdream-analytics.*order || echo "NOT_FOUND")
+          
+          echo "### S3 Buckets" >> $GITHUB_STEP_SUMMARY
+          echo "| Bucket | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Analytics | ${BACKEND_BUCKET:-NOT_FOUND} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Analytics | ${ORDER_BUCKET:-NOT_FOUND} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Test Lambda (Backend)
+        run: |
+          echo "🧪 Testing backend Lambda..."
+          
+          aws lambda invoke \
+            --function-name sweetdream-service-backend-export-logs \
+            --payload '{"test_mode": true}' \
+            response-backend.json
+          
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Backend Lambda:**" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat response-backend.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Test Lambda (Order)
+        run: |
+          echo "🧪 Testing order Lambda..."
+          
+          aws lambda invoke \
+            --function-name sweetdream-service-order-service-export-logs \
+            --payload '{"test_mode": true}' \
+            response-order.json
+          
+          echo "**Order Lambda:**" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat response-order.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Deployment Summary
+        run: |
+          echo "### 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**What was deployed:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 2 Lambda functions for log export" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 2 S3 buckets for analytics data" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 2 EventBridge rules (daily at midnight Vietnam time)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ IAM roles and permissions" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ CloudWatch Insights queries" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Wait 24 hours for first automated export" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check S3 for exported data" >> $GITHUB_STEP_SUMMARY
+          echo "3. Use CloudWatch Insights queries for analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Manual test:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'aws lambda invoke --function-name sweetdream-service-backend-export-logs --payload '"'"'{"test_mode": true}'"'"' response.json' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
