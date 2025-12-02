@@ -1,16 +1,14 @@
 #!/bin/bash
 # Manual User Action Log Export Script
 # Usage: 
-#   ./manual-export-logs.sh backend test       # Export today's backend logs
-#   ./manual-export-logs.sh backend production # Export yesterday's backend logs
-#   ./manual-export-logs.sh order test         # Export today's order logs
-#   ./manual-export-logs.sh order production   # Export yesterday's order logs
+#   ./manual-export-logs.sh backend  # Export today's backend logs (00:00 to now)
+#   ./manual-export-logs.sh order    # Export today's order logs (00:00 to now)
 
 SERVICE=${1:-backend}
-MODE=${2:-test}
 
 echo "=== CloudWatch Logs to S3 Export ==="
 echo "Service: $SERVICE"
+echo "Exporting today's logs (00:00 to now)..."
 echo ""
 
 # Lambda function names from Terraform
@@ -23,16 +21,10 @@ else
     exit 1
 fi
 
-if [ "$MODE" = "test" ]; then
-    PAYLOAD='{"test_mode": true}'
-    echo "Exporting TODAY's logs (test mode)..."
-else
-    PAYLOAD='{"test_mode": false}'
-    echo "Exporting YESTERDAY's logs (production mode)..."
-fi
+# Payload (empty object, Lambda will use current time)
+PAYLOAD='{}'
 
 echo "Invoking Lambda function: $LAMBDA_FUNCTION_NAME"
-echo "Payload: $PAYLOAD"
 echo ""
 
 aws lambda invoke \
@@ -48,8 +40,8 @@ echo ""
 
 # Check if successful
 if [ $? -eq 0 ]; then
-    echo "✓ Export completed successfully"
+    echo "[SUCCESS] Export completed successfully"
 else
-    echo "✗ Export failed"
+    echo "[FAILED] Export failed"
     exit 1
 fi

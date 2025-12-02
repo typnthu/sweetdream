@@ -10,9 +10,8 @@ import json
 import os
 import csv
 import io
-import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import time
 
 # AWS clients
@@ -22,6 +21,7 @@ s3_client = boto3.client('s3')
 def handler(event, context):
     """
     Export user_action logs from CloudWatch to S3 in JSON/CSV format
+    Exports from 00:00 to current time for today's date
     """
     log_group_name = os.environ['LOG_GROUP_NAME']
     s3_bucket = os.environ['S3_BUCKET']
@@ -31,22 +31,13 @@ def handler(event, context):
     # Vietnam timezone (UTC+7)
     vietnam_tz = timezone(timedelta(hours=7))
     
-    # Allow manual override for testing (export today's logs)
-    test_mode = event.get('test_mode', False)
-    
     # Calculate date range in Vietnam time
     now_vietnam = datetime.now(vietnam_tz)
     
-    if test_mode:
-        # For testing: export today's logs
-        target_date = now_vietnam
-        print("TEST MODE: Exporting today's logs")
-    else:
-        # Normal mode: export yesterday's logs
-        target_date = now_vietnam - timedelta(days=1)
-    
+    # Always export today's logs from 00:00 to current time
+    target_date = now_vietnam
     start_date = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    end_date = now_vietnam  # Current time
     
     print(f"Processing logs from {log_group_name}")
     print(f"Time range: {start_date} to {end_date} (Vietnam time)")
@@ -212,44 +203,33 @@ def group_logs_by_date(logs: List[Dict[str, Any]], vietnam_tz: timezone) -> Dict
 
 def export_logs_to_s3(logs: List[Dict[str, Any]], bucket: str, prefix: str, date_str: str, format_type: str) -> str:
     """
-    Export logs to S3 in specified format with duplicate prevention
+    Export logs to S3 in specified format
+    Overwrites existing file for the same day with cumulative data
     
     Strategy:
-    1. Check if file exists and merge with existing data
-    2. Use log IDs to deduplicate (timestamp + userId + message + metadata hash)
-    3. Store metadata about export runs
+    - Export all logs from 00:00 to current time for today
+    - Overwrite the file each time (no merging needed)
+    - File path: s3://bucket/user-actions/1/1/user_actions.json (for Jan 1st)
     """
-    # Create S3 key
+    # Create S3 key with simple date structure: month/day/
     year, month, day = date_str.split('-')
     
     if format_type.lower() == 'csv':
-        file_key = f"{prefix}/year={year}/month={month}/day={day}/user_actions.csv"
+        file_key = f"{prefix}/{month}/{day}/user_actions.csv"
         content_type = 'text/csv'
     else:
-        file_key = f"{prefix}/year={year}/month={month}/day={day}/user_actions.json"
+        file_key = f"{prefix}/{month}/{day}/user_actions.json"
         content_type = 'application/json'
     
-    # Add unique IDs to logs for deduplication
-    logs_with_ids = add_unique_ids(logs)
+    print(f"Exporting {len(logs)} logs to {file_key} (will overwrite if exists)")
     
-    # Check if file already exists and merge
-    existing_logs = get_existing_logs(bucket, file_key, format_type)
-    
-    if existing_logs:
-        print(f"Found existing file with {len(existing_logs)} logs. Merging...")
-        merged_logs = merge_and_deduplicate(existing_logs, logs_with_ids)
-        print(f"After deduplication: {len(merged_logs)} logs (removed {len(existing_logs) + len(logs_with_ids) - len(merged_logs)} duplicates)")
-    else:
-        merged_logs = logs_with_ids
-        print(f"No existing file. Creating new with {len(merged_logs)} logs")
-    
-    # Convert to format
+    # Convert to format (no deduplication needed since we're overwriting)
     if format_type.lower() == 'csv':
-        content = convert_to_csv(merged_logs)
+        content = convert_to_csv(logs)
     else:
-        content = convert_to_json(merged_logs)
+        content = convert_to_json(logs)
     
-    # Upload to S3
+    # Upload to S3 (overwrites existing file)
     s3_client.put_object(
         Bucket=bucket,
         Key=file_key,
@@ -259,123 +239,21 @@ def export_logs_to_s3(logs: List[Dict[str, Any]], bucket: str, prefix: str, date
     )
     
     # Store export metadata for tracking
-    store_export_metadata(bucket, prefix, date_str, len(merged_logs), len(logs_with_ids))
+    store_export_metadata(bucket, prefix, date_str, len(logs))
     
     return file_key
 
-def add_unique_ids(logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Add unique ID to each log based on its content
-    ID = hash(timestamp + userId + message + metadata)
-    """
-    logs_with_ids = []
-    
-    for log in logs:
-        # Create unique identifier from log content
-        id_components = [
-            str(log.get('@timestamp', log.get('timestamp', ''))),
-            str(log.get('userId', '')),
-            str(log.get('message', '')),
-            json.dumps(log.get('metadata', {}), sort_keys=True)
-        ]
-        
-        unique_string = '|'.join(id_components)
-        log_id = hashlib.sha256(unique_string.encode()).hexdigest()[:16]
-        
-        log_copy = log.copy()
-        log_copy['_log_id'] = log_id
-        logs_with_ids.append(log_copy)
-    
-    return logs_with_ids
-
-def get_existing_logs(bucket: str, file_key: str, format_type: str) -> Optional[List[Dict[str, Any]]]:
-    """
-    Get existing logs from S3 if file exists
-    """
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=file_key)
-        content = response['Body'].read().decode('utf-8')
-        
-        if format_type.lower() == 'csv':
-            return parse_csv_logs(content)
-        else:
-            return json.loads(content)
-            
-    except s3_client.exceptions.NoSuchKey:
-        return None
-    except Exception as e:
-        print(f"Error reading existing file: {e}")
-        return None
-
-def parse_csv_logs(csv_content: str) -> List[Dict[str, Any]]:
-    """
-    Parse CSV content back to log dictionaries
-    """
-    logs = []
-    reader = csv.DictReader(io.StringIO(csv_content))
-    
-    for row in reader:
-        log = {
-            '@timestamp': row.get('timestamp', ''),
-            'level': row.get('level', ''),
-            'service': row.get('service', ''),
-            'category': row.get('category', ''),
-            'message': row.get('message', ''),
-            'userId': int(row['userId']) if row.get('userId') and row['userId'].isdigit() else None,
-            'userName': row.get('userName', ''),
-            'sessionId': row.get('sessionId', ''),
-            '_log_id': row.get('_log_id', '')
-        }
-        
-        # Parse metadata JSON
-        if row.get('metadata'):
-            try:
-                log['metadata'] = json.loads(row['metadata'])
-            except json.JSONDecodeError:
-                log['metadata'] = {}
-        
-        logs.append(log)
-    
-    return logs
-
-def merge_and_deduplicate(existing_logs: List[Dict[str, Any]], new_logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Merge existing and new logs, removing duplicates based on _log_id
-    """
-    # Create a dictionary with log_id as key
-    merged = {}
-    
-    # Add existing logs
-    for log in existing_logs:
-        log_id = log.get('_log_id')
-        if log_id:
-            merged[log_id] = log
-    
-    # Add new logs (will overwrite if duplicate)
-    for log in new_logs:
-        log_id = log.get('_log_id')
-        if log_id:
-            merged[log_id] = log
-    
-    # Convert back to list and sort by timestamp
-    result = list(merged.values())
-    result.sort(key=lambda x: x.get('@timestamp', x.get('timestamp', '')))
-    
-    return result
-
-def store_export_metadata(bucket: str, prefix: str, date_str: str, total_logs: int, new_logs: int):
+def store_export_metadata(bucket: str, prefix: str, date_str: str, total_logs: int):
     """
     Store metadata about this export run for tracking
     """
     year, month, day = date_str.split('-')
-    metadata_key = f"{prefix}/_metadata/year={year}/month={month}/day={day}/export_runs.jsonl"
+    metadata_key = f"{prefix}/_metadata/{month}/{day}/export_runs.jsonl"
     
     export_run = {
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'date': date_str,
-        'total_logs_in_file': total_logs,
-        'new_logs_processed': new_logs,
-        'duplicates_removed': new_logs - (total_logs - get_previous_total(bucket, metadata_key))
+        'total_logs_exported': total_logs
     }
     
     # Append to JSONL file (each line is a JSON object)
@@ -403,23 +281,6 @@ def store_export_metadata(bucket: str, prefix: str, date_str: str, total_logs: i
     except Exception as e:
         print(f"Warning: Could not store metadata: {e}")
 
-def get_previous_total(bucket: str, metadata_key: str) -> int:
-    """
-    Get the total logs from the previous export run
-    """
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=metadata_key)
-        content = response['Body'].read().decode('utf-8')
-        lines = content.strip().split('\n')
-        
-        if lines and lines[-1]:
-            last_run = json.loads(lines[-1])
-            return last_run.get('total_logs_in_file', 0)
-    except:
-        pass
-    
-    return 0
-
 def convert_to_json(logs: List[Dict[str, Any]]) -> str:
     """
     Convert logs to JSON format
@@ -435,9 +296,9 @@ def convert_to_csv(logs: List[Dict[str, Any]]) -> str:
     
     output = io.StringIO()
     
-    # Define CSV columns (include _log_id for deduplication)
+    # Define CSV columns
     columns = [
-        '_log_id', 'timestamp', 'level', 'service', 'category', 'message', 
+        'timestamp', 'level', 'service', 'category', 'message', 
         'userId', 'userName', 'sessionId', 'metadata'
     ]
     
@@ -447,7 +308,6 @@ def convert_to_csv(logs: List[Dict[str, Any]]) -> str:
     for log in logs:
         # Flatten the log for CSV
         csv_row = {
-            '_log_id': log.get('_log_id', ''),
             'timestamp': log.get('@timestamp', log.get('timestamp', '')),
             'level': log.get('level', ''),
             'service': log.get('service', ''),

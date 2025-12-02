@@ -1,22 +1,17 @@
 # Manual User Action Log Export Script (PowerShell)
 # Usage: 
-#   .\manual-export-logs.ps1 backend test       # Export today's backend logs
-#   .\manual-export-logs.ps1 backend production # Export yesterday's backend logs
-#   .\manual-export-logs.ps1 order test         # Export today's order logs
-#   .\manual-export-logs.ps1 order production   # Export yesterday's order logs
+#   .\manual-export-logs.ps1 backend  # Export today's backend logs (00:00 to now)
+#   .\manual-export-logs.ps1 order    # Export today's order logs (00:00 to now)
 
 param(
     [Parameter(Position=0)]
     [ValidateSet("backend", "order")]
-    [string]$Service = "backend",
-    
-    [Parameter(Position=1)]
-    [ValidateSet("test", "production")]
-    [string]$Mode = "test"
+    [string]$Service = "backend"
 )
 
 Write-Host "=== CloudWatch Logs to S3 Export ===" -ForegroundColor Cyan
 Write-Host "Service: $Service" -ForegroundColor Yellow
+Write-Host "Exporting today's logs (00:00 to now)..." -ForegroundColor Cyan
 Write-Host ""
 
 # Lambda function names from Terraform
@@ -26,16 +21,10 @@ if ($Service -eq "backend") {
     $LambdaFunctionName = "sweetdream-service-order-service-export-logs"
 }
 
-if ($Mode -eq "test") {
-    $Payload = '{"test_mode": true}'
-    Write-Host "Exporting TODAY's logs (test mode)..." -ForegroundColor Cyan
-} else {
-    $Payload = '{"test_mode": false}'
-    Write-Host "Exporting YESTERDAY's logs (production mode)..." -ForegroundColor Cyan
-}
+# Payload (empty object, Lambda will use current time)
+$Payload = '{}'
 
 Write-Host "Invoking Lambda function: $LambdaFunctionName" -ForegroundColor Yellow
-Write-Host "Payload: $Payload" -ForegroundColor Yellow
 Write-Host ""
 
 # Invoke Lambda

@@ -5,54 +5,45 @@ These scripts allow you to manually trigger the Lambda function to export CloudW
 ## What It Does
 
 The Lambda function will:
-1. Query CloudWatch Logs for user action logs
+1. Query CloudWatch Logs for user action logs from 00:00 to current time (today)
 2. Export them to S3 in JSON format
-3. Deduplicate any existing logs (safe to run multiple times)
-4. Store in partitioned folders: `s3://bucket/user-actions/year=YYYY/month=MM/day=DD/`
+3. Overwrite the file for today's date (cumulative export)
+4. Store in simple date folders: `s3://bucket/user-actions/MM/DD/user_actions.json`
+
+Example: Running at 5 AM on Jan 1st exports 00:00-05:00 to `user-actions/1/1/user_actions.json`
+Running again at 9 AM overwrites with 00:00-09:00 data in the same file.
 
 ## Usage
 
 ### PowerShell (Windows)
 
 ```powershell
-# Export today's backend logs (for testing)
-.\scripts\manual-export-logs.ps1 backend test
+# Export today's backend logs (from 00:00 to now)
+.\scripts\manual-export-logs.ps1 backend
 
-# Export yesterday's backend logs (normal mode)
-.\scripts\manual-export-logs.ps1 backend production
-
-# Export today's order service logs
-.\scripts\manual-export-logs.ps1 order test
-
-# Export yesterday's order service logs
-.\scripts\manual-export-logs.ps1 order production
+# Export today's order service logs (from 00:00 to now)
+.\scripts\manual-export-logs.ps1 order
 ```
 
 ### Bash (Linux/Mac)
 
 ```bash
-# Export today's backend logs (for testing)
-./scripts/manual-export-logs.sh backend test
+# Export today's backend logs (from 00:00 to now)
+./scripts/manual-export-logs.sh backend
 
-# Export yesterday's backend logs (normal mode)
-./scripts/manual-export-logs.sh backend production
-
-# Export today's order service logs
-./scripts/manual-export-logs.sh order test
-
-# Export yesterday's order service logs
-./scripts/manual-export-logs.sh order production
+# Export today's order service logs (from 00:00 to now)
+./scripts/manual-export-logs.sh order
 ```
 
 ## Lambda Functions
 
 - **Backend**: `sweetdream-service-backend-export-logs`
   - Exports from: `/ecs/sweetdream-sweetdream-backend`
-  - Exports to: `s3://sweetdream-analytics-backend-dev/user-actions/`
+  - Exports to: `s3://sweetdream-analytics-backend-dev/user-actions/MM/DD/user_actions.json`
 
 - **Order Service**: `sweetdream-service-order-service-export-logs`
   - Exports from: `/ecs/sweetdream-sweetdream-order-service`
-  - Exports to: `s3://sweetdream-analytics-order-dev/user-actions/`
+  - Exports to: `s3://sweetdream-analytics-order-dev/user-actions/MM/DD/user_actions.json`
 
 ## Requirements
 
@@ -70,7 +61,8 @@ The script will show:
 
 ## Notes
 
-- **Safe to run multiple times** - The Lambda has built-in deduplication
-- **Test mode** exports today's logs (useful for immediate testing)
-- **Production mode** exports yesterday's logs (normal daily operation)
+- **Safe to run multiple times** - Each run overwrites today's file with cumulative data
+- **Always exports today's logs** from 00:00 to current time
+- **Scheduled at 9 AM Vietnam time** to capture full day's data
 - Logs are stored in Vietnam timezone (UTC+7)
+- File structure: `user-actions/1/1/user_actions.json` for January 1st

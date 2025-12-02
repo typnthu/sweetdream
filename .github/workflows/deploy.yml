@@ -407,16 +407,18 @@ jobs:
         run: |
           echo "🧪 Testing Lambda functions..."
           
-          # Test backend Lambda
+          # Test backend Lambda (empty payload - exports today's logs)
           aws lambda invoke \
             --function-name sweetdream-service-backend-export-logs \
-            --payload '{"test_mode": true}' \
+            --payload '{}' \
+            --cli-binary-format raw-in-base64-out \
             response-backend.json
           
-          # Test order Lambda
+          # Test order Lambda (empty payload - exports today's logs)
           aws lambda invoke \
             --function-name sweetdream-service-order-service-export-logs \
-            --payload '{"test_mode": true}' \
+            --payload '{}' \
+            --cli-binary-format raw-in-base64-out \
             response-order.json
           
           echo "### 🧪 Lambda Test Results" >> $GITHUB_STEP_SUMMARY
