@@ -205,12 +205,12 @@ resource "aws_cloudwatch_log_group" "export_lambda" {
   tags = var.tags
 }
 
-# EventBridge Rule - Daily at 9:00 AM Vietnam time (2:00 AM UTC)
+# EventBridge Rule - Daily at 10:00 AM Vietnam time (3:00 AM UTC)
 resource "aws_cloudwatch_event_rule" "daily_export" {
   count               = var.enable_lambda_export ? 1 : 0
   name                = "${var.service_name}-daily-export"
-  description         = "Trigger daily user action log export to S3 at 9:00 AM Vietnam time"
-  schedule_expression = "cron(0 2 * * ? *)"
+  description         = "Trigger daily user action log export to S3 at 10:00 AM Vietnam time"
+  schedule_expression = "cron(0 3 * * ? *)"
 
   tags = var.tags
 }

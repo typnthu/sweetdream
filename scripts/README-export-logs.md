@@ -10,7 +10,7 @@ The Lambda function will:
 3. Overwrite the file for today's date (cumulative export)
 4. Store in simple date folders: `s3://bucket/user-actions/MM/DD/user_actions.json`
 
-Example: Running at 5 AM on Jan 1st exports 00:00-05:00 to `user-actions/1/1/user_actions.json`
+Example: Running at 5 AM on Jan 1st 2025 exports 00:00-05:00 to `user-actions/2025/1/1/user_actions.json`
 Running again at 9 AM overwrites with 00:00-09:00 data in the same file.
 
 ## Usage
@@ -39,11 +39,11 @@ Running again at 9 AM overwrites with 00:00-09:00 data in the same file.
 
 - **Backend**: `sweetdream-service-backend-export-logs`
   - Exports from: `/ecs/sweetdream-sweetdream-backend`
-  - Exports to: `s3://sweetdream-analytics-backend-dev/user-actions/MM/DD/user_actions.json`
+  - Exports to: `s3://sweetdream-analytics-backend-dev/user-actions/YYYY/MM/DD/user_actions.json`
 
 - **Order Service**: `sweetdream-service-order-service-export-logs`
   - Exports from: `/ecs/sweetdream-sweetdream-order-service`
-  - Exports to: `s3://sweetdream-analytics-order-dev/user-actions/MM/DD/user_actions.json`
+  - Exports to: `s3://sweetdream-analytics-order-dev/user-actions/YYYY/MM/DD/user_actions.json`
 
 ## Requirements
 
@@ -63,6 +63,6 @@ The script will show:
 
 - **Safe to run multiple times** - Each run overwrites today's file with cumulative data
 - **Always exports today's logs** from 00:00 to current time
-- **Scheduled at 9 AM Vietnam time** to capture full day's data
+- **Scheduled at 10 AM Vietnam time** to capture full day's data
 - Logs are stored in Vietnam timezone (UTC+7)
-- File structure: `user-actions/1/1/user_actions.json` for January 1st
+- File structure: `user-actions/2025/1/1/user_actions.json` for January 1st, 2025

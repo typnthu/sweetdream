@@ -209,16 +209,16 @@ def export_logs_to_s3(logs: List[Dict[str, Any]], bucket: str, prefix: str, date
     Strategy:
     - Export all logs from 00:00 to current time for today
     - Overwrite the file each time (no merging needed)
-    - File path: s3://bucket/user-actions/1/1/user_actions.json (for Jan 1st)
+    - File path: s3://bucket/user-actions/2025/1/1/user_actions.json (for Jan 1st, 2025)
     """
-    # Create S3 key with simple date structure: month/day/
+    # Create S3 key with date structure: year/month/day/
     year, month, day = date_str.split('-')
     
     if format_type.lower() == 'csv':
-        file_key = f"{prefix}/{month}/{day}/user_actions.csv"
+        file_key = f"{prefix}/{year}/{month}/{day}/user_actions.csv"
         content_type = 'text/csv'
     else:
-        file_key = f"{prefix}/{month}/{day}/user_actions.json"
+        file_key = f"{prefix}/{year}/{month}/{day}/user_actions.json"
         content_type = 'application/json'
     
     print(f"Exporting {len(logs)} logs to {file_key} (will overwrite if exists)")
@@ -248,7 +248,7 @@ def store_export_metadata(bucket: str, prefix: str, date_str: str, total_logs: i
     Store metadata about this export run for tracking
     """
     year, month, day = date_str.split('-')
-    metadata_key = f"{prefix}/_metadata/{month}/{day}/export_runs.jsonl"
+    metadata_key = f"{prefix}/_metadata/{year}/{month}/{day}/export_runs.jsonl"
     
     export_run = {
         'timestamp': datetime.now(timezone.utc).isoformat(),
