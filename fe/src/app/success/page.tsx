@@ -3,38 +3,70 @@ import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useOrders, type Order, type OrderStatus } from "@/context/OrderContext";
 import { useAuth } from "@/context/AuthContext";
 import AuthGuard from "@/components/AuthGuard";
 
-const getStatusColor = (status: OrderStatus) => {
-  switch (status) {
-    case "PLACED": return "bg-blue-100 text-blue-800";
+const getStatusColor = (status: string) => {
+  const statusUpper = status.toUpperCase();
+  switch (statusUpper) {
+    case "PENDING": return "bg-yellow-100 text-yellow-800";
     case "CONFIRMED": return "bg-green-100 text-green-800";
     case "PREPARING": return "bg-orange-100 text-orange-800";
-    case "DELIVERING": return "bg-purple-100 text-purple-800";
+    case "READY": return "bg-purple-100 text-purple-800";
     case "DELIVERED": return "bg-emerald-100 text-emerald-800";
     case "CANCELLED": return "bg-red-100 text-red-800";
     default: return "bg-gray-100 text-gray-800";
   }
 };
 
-const getStatusText = (status: OrderStatus) => {
-  switch (status) {
-    case "PLACED": return "Đã đặt hàng";
+const getStatusText = (status: string) => {
+  const statusUpper = status.toUpperCase();
+  switch (statusUpper) {
+    case "PENDING": return "Chờ xác nhận";
     case "CONFIRMED": return "Đã xác nhận";
     case "PREPARING": return "Đang chuẩn bị";
-    case "DELIVERING": return "Đang giao hàng";
+    case "READY": return "Sẵn sàng giao";
     case "DELIVERED": return "Đã giao thành công";
     case "CANCELLED": return "Đã hủy";
     default: return status;
   }
 };
 
+const canCancelOrder = (status: string) => {
+  const statusUpper = status.toUpperCase();
+  return statusUpper === "PENDING" || statusUpper === "CONFIRMED";
+};
+
+interface BackendOrder {
+  id: number;
+  status: string;
+  total: number;
+  shipping: number;
+  notes?: string;
+  createdAt: string;
+  customer: {
+    name: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  };
+  items: Array<{
+    id: number;
+    size: string;
+    price: number;
+    quantity: number;
+    product: {
+      name: string;
+      img: string;
+    };
+  }>;
+}
+
 function SuccessContent() {
-  const { orders, cancelOrder } = useOrders();
   const { user } = useAuth();
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<BackendOrder | null>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -43,8 +75,31 @@ function SuccessContent() {
   const orderId = searchParams.get('orderId');
   const isFromCheckout = searchParams.get('fromCheckout') === 'true';
 
+  // Fetch orders from backend
   useEffect(() => {
-    if (orderId && isFromCheckout) {
+    if (user?.email) {
+      fetchOrders();
+    } else if (user === null) {
+      // User is not logged in, stop loading
+      setLoading(false);
+    }
+  }, [user]);
+
+  async function fetchOrders() {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/proxy/orders?customerEmail=${user?.email}&limit=100`);
+      const data = await response.json();
+      setOrders(data.orders || []);
+    } catch (error) {
+      console.error('Failed to fetch orders:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (orderId && isFromCheckout && orders.length > 0) {
       const order = orders.find(o => o.id === parseInt(orderId));
       if (order) {
         setSelectedOrder(order);
@@ -53,16 +108,33 @@ function SuccessContent() {
     }
   }, [orderId, isFromCheckout, orders]);
 
-  const handleViewOrderDetail = (order: Order) => {
+  const handleViewOrderDetail = (order: BackendOrder) => {
     setSelectedOrder(order);
     setShowOrderDetail(true);
   };
 
-  const handleCancelOrder = (orderId: number) => {
+  const handleCancelOrder = async (orderId: number) => {
     if (confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) {
-      cancelOrder(orderId);
-      if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder({ ...selectedOrder, status: "CANCELLED", canCancel: false });
+      try {
+        const response = await fetch(`/api/proxy/orders/${orderId}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isAdmin: false })
+        });
+
+        if (response.ok) {
+          alert("✅ Đã hủy đơn hàng thành công");
+          fetchOrders(); // Refresh orders
+          if (selectedOrder && selectedOrder.id === orderId) {
+            setSelectedOrder({ ...selectedOrder, status: "CANCELLED" });
+          }
+        } else {
+          const error = await response.json();
+          alert(`❌ ${error.message || error.error || 'Không thể hủy đơn hàng'}`);
+        }
+      } catch (error) {
+        console.error('Cancel error:', error);
+        alert("❌ Không thể hủy đơn hàng");
       }
     }
   };
@@ -76,7 +148,7 @@ function SuccessContent() {
 
   return (
     <AuthGuard>
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6 max-w-5xl mx-auto">
       {isFromCheckout && selectedOrder ? (
         // Success message when coming from checkout
         <div className="text-center mb-8 bg-green-50 p-6 rounded-lg">
@@ -85,89 +157,87 @@ function SuccessContent() {
             Đặt hàng thành công!
           </h1>
           <p className="text-gray-600 mb-4">
-            Cảm ơn bạn đã mua hàng. Đơn hàng #{selectedOrder.orderNumber} đã được tạo thành công.
+            Cảm ơn bạn đã mua hàng. Đơn hàng #{selectedOrder.id} đã được tạo thành công.
           </p>
         </div>
       ) : (
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Xin chào, {user?.name}! 👋
-          </h1>
-          <p className="text-gray-600">Theo dõi và quản lý các đơn hàng của bạn</p>
+          <p className="text-2xl font-bold mb-8 text-pink-500"> Đơn hàng của bạn</p>
         </div>
       )}
 
       {/* Orders List */}
-      <div className="space-y-4">
-        {orders.map((order) => (
-          <div key={order.id} className="bg-white border rounded-lg p-6 hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800">
-                  Đơn hàng #{order.orderNumber}
-                </h3>
-                <p className="text-sm text-gray-500">Ngày đặt: {order.date}</p>
-              </div>
-              <div className="text-right">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                  {getStatusText(order.status)}
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Thông tin khách hàng:</h4>
-                <p className="text-sm text-gray-600">{order.customer.name}</p>
-                <p className="text-sm text-gray-600">{order.customer.email}</p>
-                <p className="text-sm text-gray-600">{order.customer.phone}</p>
-              </div>
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Địa chỉ giao hàng:</h4>
-                <p className="text-sm text-gray-600">{order.customer.address}</p>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">
-                  {order.items.length} sản phẩm • Tổng: <span className="font-semibold text-pink-600">
-                    {(order.total + order.shipping).toLocaleString()} VND
+      {loading ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">Đang tải đơn hàng...</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <div key={order.id} className="bg-white border rounded-lg p-6 hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Đơn hàng #{order.id}
+                  </h3>
+                  <p className="text-sm text-gray-500">Ngày đặt: {new Date(order.createdAt).toLocaleDateString('vi-VN')}</p>
+                </div>
+                <div className="text-right">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                    {getStatusText(order.status)}
                   </span>
-                </p>
-                {order.estimatedDelivery && order.status === "PLACED" && (
-                  <p className="text-xs text-blue-600 mt-1">
-                    Dự kiến giao: {order.estimatedDelivery}
-                  </p>
-                )}
+                </div>
               </div>
-              <div className="flex gap-2">
-                {order.canCancel && (
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Thông tin khách hàng:</h4>
+                  <p className="text-sm text-gray-600">{order.customer.name}</p>
+                  <p className="text-sm text-gray-600">{order.customer.email}</p>
+                  <p className="text-sm text-gray-600">{order.customer.phone}</p>
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Địa chỉ giao hàng:</h4>
+                  <p className="text-sm text-gray-600">{order.customer.address}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-600">
+                    {order.items.length} sản phẩm • Tổng: <span className="font-semibold text-pink-600">
+                      {(Number(order.total) + Number(order.shipping)).toLocaleString()} VND
+                    </span>
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {canCancelOrder(order.status) && (
+                    <button
+                      onClick={() => handleCancelOrder(order.id)}
+                      className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-sm"
+                    >
+                      Hủy đơn
+                    </button>
+                  )}
                   <button
-                    onClick={() => handleCancelOrder(order.id)}
-                    className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-sm"
+                    onClick={() => handleViewOrderDetail(order)}
+                    className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition"
                   >
-                    Hủy đơn
+                    Xem chi tiết
                   </button>
-                )}
-                <button
-                  onClick={() => handleViewOrderDetail(order)}
-                  className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition"
-                >
-                  Xem chi tiết
-                </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {orders.length === 0 && (
         <div className="text-center py-12">
           <p className="text-gray-500 text-xl mb-4">Chưa có đơn hàng nào</p>
           <Link
             href="/"
-            className="bg-pink-600 text-white px-6 py-3 rounded-lg hover:bg-pink-700 transition"
+            className="bg-white text-pink-500 px-3 py-3 rounded-lg hover:text-pink-700 transition"
           >
             Bắt đầu mua sắm
           </Link>
@@ -183,9 +253,9 @@ function SuccessContent() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-gray-800">
-                    Chi tiết đơn hàng #{selectedOrder.orderNumber}
+                    Chi tiết đơn hàng #{selectedOrder.id}
                   </h2>
-                  <p className="text-sm text-gray-600">Ngày đặt: {selectedOrder.date}</p>
+                  <p className="text-sm text-gray-600">Ngày đặt: {new Date(selectedOrder.createdAt).toLocaleDateString('vi-VN')}</p>
                 </div>
                 <button
                   onClick={closeOrderDetail}
@@ -204,13 +274,8 @@ function SuccessContent() {
                   <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatusColor(selectedOrder.status)}`}>
                     {getStatusText(selectedOrder.status)}
                   </span>
-                  {selectedOrder.estimatedDelivery && selectedOrder.status === "PLACED" && (
-                    <p className="text-sm text-blue-600 mt-2">
-                      Dự kiến giao: {selectedOrder.estimatedDelivery}
-                    </p>
-                  )}
                 </div>
-                {selectedOrder.canCancel && (
+                {canCancelOrder(selectedOrder.status) && (
                   <button
                     onClick={() => handleCancelOrder(selectedOrder.id)}
                     className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition text-sm"
@@ -225,33 +290,33 @@ function SuccessContent() {
                 <h3 className="font-semibold text-gray-800 mb-3">Quy trình đơn hàng</h3>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="space-y-2 text-sm">
-                    <div className={`flex items-center ${selectedOrder.status === "PLACED" ? "text-blue-600 font-medium" : selectedOrder.status !== "CANCELLED" ? "text-green-600" : "text-gray-400"}`}>
+                    <div className={`flex items-center ${selectedOrder.status.toUpperCase() === "PENDING" ? "text-blue-600 font-medium" : selectedOrder.status.toUpperCase() !== "CANCELLED" ? "text-green-600" : "text-gray-400"}`}>
                       <span className="w-2 h-2 rounded-full bg-current mr-3"></span>
-                      1. Đặt hàng - {selectedOrder.status === "PLACED" ? "Đang chờ xác nhận" : "Hoàn thành"}
+                      1. Chờ xác nhận - {selectedOrder.status.toUpperCase() === "PENDING" ? "Đang chờ xác nhận" : "Hoàn thành"}
                     </div>
-                    <div className={`flex items-center ${selectedOrder.status === "CONFIRMED" ? "text-blue-600 font-medium" : ["PREPARING", "DELIVERING", "DELIVERED"].includes(selectedOrder.status) ? "text-green-600" : "text-gray-400"}`}>
+                    <div className={`flex items-center ${selectedOrder.status.toUpperCase() === "CONFIRMED" ? "text-blue-600 font-medium" : ["PREPARING", "READY", "DELIVERED"].includes(selectedOrder.status.toUpperCase()) ? "text-green-600" : "text-gray-400"}`}>
                       <span className="w-2 h-2 rounded-full bg-current mr-3"></span>
-                      2. Xác nhận - {selectedOrder.status === "CONFIRMED" ? "Đã xác nhận, chuẩn bị làm bánh" : ["PREPARING", "DELIVERING", "DELIVERED"].includes(selectedOrder.status) ? "Hoàn thành" : "Chờ xử lý"}
+                      2. Đã xác nhận - {selectedOrder.status.toUpperCase() === "CONFIRMED" ? "Đã xác nhận, chuẩn bị làm bánh" : ["PREPARING", "READY", "DELIVERED"].includes(selectedOrder.status.toUpperCase()) ? "Hoàn thành" : "Chờ xử lý"}
                     </div>
-                    <div className={`flex items-center ${selectedOrder.status === "PREPARING" ? "text-blue-600 font-medium" : ["DELIVERING", "DELIVERED"].includes(selectedOrder.status) ? "text-green-600" : "text-gray-400"}`}>
+                    <div className={`flex items-center ${selectedOrder.status.toUpperCase() === "PREPARING" ? "text-blue-600 font-medium" : ["READY", "DELIVERED"].includes(selectedOrder.status.toUpperCase()) ? "text-green-600" : "text-gray-400"}`}>
                       <span className="w-2 h-2 rounded-full bg-current mr-3"></span>
-                      3. Chuẩn bị - {selectedOrder.status === "PREPARING" ? "Đang làm bánh" : ["DELIVERING", "DELIVERED"].includes(selectedOrder.status) ? "Hoàn thành" : "Chờ xử lý"}
+                      3. Đang chuẩn bị - {selectedOrder.status.toUpperCase() === "PREPARING" ? "Đang làm bánh" : ["READY", "DELIVERED"].includes(selectedOrder.status.toUpperCase()) ? "Hoàn thành" : "Chờ xử lý"}
                     </div>
-                    <div className={`flex items-center ${selectedOrder.status === "DELIVERING" ? "text-blue-600 font-medium" : selectedOrder.status === "DELIVERED" ? "text-green-600" : "text-gray-400"}`}>
+                    <div className={`flex items-center ${selectedOrder.status.toUpperCase() === "READY" ? "text-blue-600 font-medium" : selectedOrder.status.toUpperCase() === "DELIVERED" ? "text-green-600" : "text-gray-400"}`}>
                       <span className="w-2 h-2 rounded-full bg-current mr-3"></span>
-                      4. Giao hàng - {selectedOrder.status === "DELIVERING" ? "Shipper đang giao" : selectedOrder.status === "DELIVERED" ? "Hoàn thành" : "Chờ xử lý"}
+                      4. Sẵn sàng giao - {selectedOrder.status.toUpperCase() === "READY" ? "Shipper đang giao" : selectedOrder.status.toUpperCase() === "DELIVERED" ? "Hoàn thành" : "Chờ xử lý"}
                     </div>
-                    <div className={`flex items-center ${selectedOrder.status === "DELIVERED" ? "text-green-600 font-medium" : "text-gray-400"}`}>
+                    <div className={`flex items-center ${selectedOrder.status.toUpperCase() === "DELIVERED" ? "text-green-600 font-medium" : "text-gray-400"}`}>
                       <span className="w-2 h-2 rounded-full bg-current mr-3"></span>
-                      5. Hoàn thành - {selectedOrder.status === "DELIVERED" ? "Đã giao thành công" : "Chờ xử lý"}
+                      5. Đã giao - {selectedOrder.status.toUpperCase() === "DELIVERED" ? "Đã giao thành công" : "Chờ xử lý"}
                     </div>
                   </div>
                   
-                  {selectedOrder.status === "PLACED" && (
+                  {canCancelOrder(selectedOrder.status) && (
                     <div className="mt-3 p-3 bg-yellow-50 rounded border-l-4 border-yellow-400">
                       <p className="text-sm text-yellow-700">
-                        <strong>Lưu ý:</strong> Bạn có thể hủy đơn hàng khi đang chờ xác nhận. 
-                        Sau khi được xác nhận, vui lòng liên hệ trực tiếp: <strong>0767218023</strong>
+                        <strong>Lưu ý:</strong> Bạn có thể hủy đơn hàng khi đang chờ xác nhận hoặc đã xác nhận. 
+                        Sau khi bắt đầu chuẩn bị, vui lòng liên hệ trực tiếp: <strong>0767218023</strong>
                       </p>
                     </div>
                   )}
@@ -272,22 +337,22 @@ function SuccessContent() {
               {/* Order Items */}
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-800 mb-3">Sản phẩm đã đặt</h3>
-                {selectedOrder.items.map((item: any) => (
+                {selectedOrder.items.map((item) => (
                   <div key={item.id} className="flex items-center gap-4 p-3 border rounded-lg mb-3">
                     <Image
-                      src={item.img}
-                      alt={item.name}
+                      src={item.product.img}
+                      alt={item.product.name}
                       width={60}
                       height={60}
                       className="rounded-lg object-cover"
                     />
                     <div className="flex-1">
-                      <p className="font-medium text-gray-800">{item.name}</p>
+                      <p className="font-medium text-gray-800">{item.product.name} ({item.size})</p>
                       <p className="text-sm text-gray-600">Số lượng: {item.quantity}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-pink-600">
-                        {(item.price * item.quantity).toLocaleString()} VND
+                        {(Number(item.price) * item.quantity).toLocaleString()} VND
                       </p>
                     </div>
                   </div>
@@ -299,15 +364,15 @@ function SuccessContent() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-gray-600">
                     <span>Tạm tính:</span>
-                    <span>{selectedOrder.total.toLocaleString()} VND</span>
+                    <span>{Number(selectedOrder.total).toLocaleString()} VND</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Phí vận chuyển:</span>
-                    <span>{selectedOrder.shipping.toLocaleString()} VND</span>
+                    <span>{Number(selectedOrder.shipping).toLocaleString()} VND</span>
                   </div>
                   <div className="flex justify-between text-lg font-bold text-pink-600 border-t pt-2">
                     <span>Tổng cộng:</span>
-                    <span>{(selectedOrder.total + selectedOrder.shipping).toLocaleString()} VND</span>
+                    <span>{(Number(selectedOrder.total) + Number(selectedOrder.shipping)).toLocaleString()} VND</span>
                   </div>
                 </div>
               </div>
@@ -315,7 +380,7 @@ function SuccessContent() {
 
             {/* Modal Footer */}
             <div className="p-6 border-t bg-gray-50">
-              {selectedOrder.status !== "PLACED" && selectedOrder.status !== "CANCELLED" && (
+              {!canCancelOrder(selectedOrder.status) && selectedOrder.status.toUpperCase() !== "CANCELLED" && (
                 <div className="mb-4 p-3 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-700 text-center">
                     <strong>Cần hỗ trợ?</strong> Liên hệ: 0767218023 | Zalo: 0767218023

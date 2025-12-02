@@ -1,6 +1,8 @@
 import express from 'express';
 import { prisma } from '../server';
 import { validateProduct } from '../validators/product';
+import { logProductView } from '../utils/analyticsLogger';
+import { optionalAuth } from '../middleware/optionalAuth';
 
 const router = express.Router();
 
@@ -29,7 +31,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get product by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -48,6 +50,18 @@ router.get('/:id', async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    // Log product view for analytics
+    const user = (req as any).user;
+    logProductView({
+      userId: user?.id,
+      userName: user?.name,
+      sessionId: req.headers['x-session-id'] as string,
+      productId: product.id,
+      productName: product.name,
+      category: product.category.name,
+      price: Number(product.sizes[0]?.price || 0)
+    });
 
     res.json(product);
   } catch (error) {
@@ -169,13 +183,34 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Check if product has any orders
+    const orderItemsCount = await prisma.orderItem.count({
+      where: { productId: parseInt(id) }
+    });
+
+    if (orderItemsCount > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete product with existing orders',
+        message: `Không thể xóa sản phẩm này vì đã có ${orderItemsCount} đơn hàng liên quan. Bạn có thể ẩn sản phẩm thay vì xóa.`
+      });
+    }
+
     await prisma.product.delete({
       where: { id: parseInt(id) }
     });
 
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting product:', error);
+    
+    // Handle foreign key constraint error
+    if (error.code === 'P2003') {
+      return res.status(400).json({ 
+        error: 'Cannot delete product with existing orders',
+        message: 'Không thể xóa sản phẩm này vì đã có đơn hàng liên quan'
+      });
+    }
+    
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });

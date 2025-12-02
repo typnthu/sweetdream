@@ -1,65 +1,54 @@
-# SweetDream Backend API
+# SweetDream Backend Service
 
-A Node.js/Express backend API for the SweetDream e-commerce platform, designed to run on AWS ECS with MySQL RDS.
+Node.js/Express backend API for the SweetDream e-commerce platform. Handles products, categories, orders, and customers in a microservices architecture.
 
 ## 🏗️ Architecture
 
-- **Backend**: Node.js + Express + TypeScript
-- **Database**: PostgreSQL (AWS RDS)
-- **ORM**: Prisma
+- **Runtime**: Node.js 20 + Express + TypeScript
+- **Database**: PostgreSQL 15 (AWS RDS)
+- **ORM**: Prisma 5
 - **Container**: Docker
 - **Deployment**: AWS ECS Fargate
-- **Load Balancer**: AWS Application Load Balancer
+- **Port**: 3001
 
 ## 🚀 Quick Start
 
 ### Local Development
 
-1. **Install dependencies**:
+1. **Start database** (from project root):
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+2. **Install dependencies**:
 ```bash
 npm install
 ```
 
-2. **Set up environment variables**:
+3. **Set up environment**:
 ```bash
 cp .env.example .env
-# Edit .env with your database credentials
 ```
 
-3. **Set up database**:
+Edit `.env`:
+```env
+DATABASE_URL=postgresql://dev:dev123@localhost:5432/sweetdream
+PORT=3001
+```
+
+4. **Set up database**:
 ```bash
-# Generate Prisma client
-npm run generate
-
-# Run migrations
-npm run migrate
-
-# Or push schema to database
-npm run db:push
+npx prisma generate
+npx prisma migrate dev
+npm run seed
 ```
 
-4. **Start development server**:
+5. **Start development server**:
 ```bash
 npm run dev
 ```
 
 The API will be available at `http://localhost:3001`
-
-### Using Docker Compose (Local)
-
-1. **Start all services**:
-```bash
-docker-compose up -d
-```
-
-This will start:
-- PostgreSQL database on port 5432
-- Backend API on port 3001
-
-2. **Run migrations**:
-```bash
-docker-compose exec api npm run migrate
-```
 
 ## 📊 API Endpoints
 
@@ -82,8 +71,9 @@ docker-compose exec api npm run migrate
 - `GET /api/orders` - Get all orders (with pagination)
 - `GET /api/orders/:id` - Get order by ID
 - `POST /api/orders` - Create new order
-- `PATCH /api/orders/:id/status` - Update order status
-- `DELETE /api/orders/:id` - Delete order
+- `POST /api/orders/:id/cancel` - Cancel order
+- `PATCH /api/orders/:id/status` - Update order status (Admin)
+- `DELETE /api/orders/:id` - Delete order (Admin)
 
 ### Customers
 - `GET /api/customers` - Get all customers (with pagination)
@@ -98,76 +88,29 @@ docker-compose exec api npm run migrate
 
 ## 🏗️ AWS Deployment
 
-### Prerequisites
+Deployment is automated via GitHub Actions. See the main [README.md](../README.md) for full deployment instructions.
 
-1. **AWS CLI configured** with appropriate permissions
-2. **Docker** installed
-3. **AWS Account** with ECS, RDS, and ECR access
-
-### Step 1: Deploy Infrastructure
+### Manual Build & Push
 
 ```bash
-# Deploy CloudFormation stack
-aws cloudformation create-stack \
-  --stack-name sweetdream-infrastructure \
-  --template-body file://aws/cloudformation-infrastructure.yml \
-  --parameters ParameterKey=Environment,ParameterValue=production \
-               ParameterKey=DBUsername,ParameterValue=sweetdream \
-               ParameterKey=DBPassword,ParameterValue=YourSecurePassword123 \
-  --capabilities CAPABILITY_NAMED_IAM
+# Get AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+# Build and push
+docker build -t $ECR_REGISTRY/sweetdream-backend:latest .
+docker push $ECR_REGISTRY/sweetdream-backend:latest
 ```
 
-### Step 2: Create Secrets in AWS Secrets Manager
+### Environment Variables (AWS)
 
-```bash
-# Database URL secret
-aws secretsmanager create-secret \
-  --name "sweetdream/database-url" \
-  --description "Database connection URL for SweetDream" \
-  --secret-string "postgresql://admin:YourSecurePassword123@your-rds-endpoint.region.rds.amazonaws.com:5432/sweetdream"
-
-# JWT Secret
-aws secretsmanager create-secret \
-  --name "sweetdream/jwt-secret" \
-  --description "JWT secret for SweetDream API" \
-  --secret-string "your-super-secret-jwt-key-change-this-in-production"
-```
-
-### Step 3: Update Configuration Files
-
-1. **Update `aws/task-definition.json`**:
-   - Replace `YOUR_ACCOUNT_ID` with your AWS account ID
-   - Replace `YOUR_REGION` with your AWS region
-   - Update secret ARNs
-
-2. **Update `aws/service-definition.json`**:
-   - Replace subnet IDs and security group IDs from CloudFormation outputs
-   - Update target group ARN
-
-3. **Update `deploy.sh`**:
-   - Set your AWS account ID and region
-
-### Step 4: Deploy Application
-
-```bash
-# Make deploy script executable
-chmod +x deploy.sh
-
-# Run deployment
-./deploy.sh
-```
-
-### Step 5: Run Database Migrations
-
-```bash
-# Connect to ECS task and run migrations
-aws ecs execute-command \
-  --cluster sweetdream-cluster \
-  --task TASK_ID \
-  --container sweetdream-api \
-  --interactive \
-  --command "npm run migrate"
-```
+Set in ECS task definition:
+- `DATABASE_URL`: RDS connection string (from Terraform output)
+- `PORT`: 3001
+- `NODE_ENV`: production
 
 ## 🗄️ Database Schema
 
@@ -186,9 +129,8 @@ The database includes the following tables:
 |----------|-------------|---------|
 | `NODE_ENV` | Environment (development/production) | development |
 | `PORT` | Server port | 3001 |
-| `DATABASE_URL` | MySQL connection string | - |
-| `JWT_SECRET` | JWT signing secret | - |
-| `FRONTEND_URL` | Frontend URL for CORS | http://localhost:3000 |
+| `DATABASE_URL` | PostgreSQL connection string | - |
+| `S3_BUCKET` | S3 bucket for product images | sweetdream-products |
 
 ## 🔒 Security Features
 
@@ -207,12 +149,11 @@ The database includes the following tables:
 
 ## 🚀 Production Considerations
 
-1. **Database**: Use RDS with Multi-AZ for high availability
-2. **Scaling**: Configure ECS auto-scaling based on CPU/memory
-3. **SSL/TLS**: Add HTTPS listener to ALB with ACM certificate
-4. **Monitoring**: Set up CloudWatch alarms and dashboards
-5. **Backup**: Configure automated RDS backups
-6. **Security**: Use AWS WAF for additional protection
+1. **Database**: RDS PostgreSQL with automated backups
+2. **Scaling**: ECS auto-scaling configured (2-10 tasks)
+3. **Monitoring**: CloudWatch logs and metrics enabled
+4. **Security**: Private subnets, security groups, IAM roles
+5. **Images**: Product images stored in S3
 
 ## 🛠️ Development Commands
 
@@ -242,20 +183,11 @@ docker run -p 3001:3001 sweetdream-backend
 
 ## 📝 API Documentation
 
-For detailed API documentation, you can:
+See the main [README.md](../README.md#-api-documentation) for complete API documentation.
 
-1. Import the Postman collection (coming soon)
-2. Use the health check endpoint to verify the API is running
-3. Check the route files in `src/routes/` for endpoint details
+## 🔗 Related Services
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
+- **Frontend**: [fe/](../fe/)
+- **User Service**: [user-service/](../user-service/)
+- **Order Service**: [order-service/](../order-service/)
+- **Infrastructure**: [terraform/](../terraform/)

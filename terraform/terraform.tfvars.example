@@ -1,19 +1,30 @@
-# VPC Configuration
-#vpc_cidr = "10.0.0.0/16"
+# Terraform Variables
+# Copy this file to terraform.tfvars and fill in your values
+# terraform.tfvars is gitignored for security
 
-# ECS Configuration
-#cluster_name = "sweetdream-cluster"
-#task_name    = "sweetdream-task"
-#service_name = "sweetdream-service"
-
-# Docker Images (Replace with your ECR image URIs after pushing)
-#backend_image  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest"
-#frontend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sweetdream-frontend:latest"
+# AWS Configuration
+aws_region = "us-east-1"
+environment = "production"
 
 # Database Configuration
 db_name     = "sweetdream"
-db_username = "admin"
-db_password = "admin123!"  # Change this!
+db_username = "postgres"
+db_password = "CHANGE_ME_TO_SECURE_PASSWORD"  # Change this!
 
 # S3 Configuration
-#s3_bucket_name = "sweetdream-logs-data-12345"  # Must be globally unique
+s3_bucket_name = "sweetdream-logs-data"
+
+# Analytics
+enable_customer_analytics = true
+analytics_bucket_prefix   = "sweetdream-analytics"
+
+# Monitoring
+log_retention_days = 7
+alert_email        = "your-email@example.com"
+
+# Optional Features
+enable_bastion = false
+
+# Deployment Configuration (Rolling Updates)
+deployment_minimum_healthy_percent = 50
+deployment_maximum_percent = 200

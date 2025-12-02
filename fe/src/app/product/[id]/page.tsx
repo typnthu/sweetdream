@@ -1,26 +1,69 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
-import { useState } from "react";
-import products from "@/products/index";
+import { getProduct, getProducts, type Product } from "@/lib/api";
+import { formatPrice } from "@/lib/formatPrice";
 
 export default function ProductDetail() {
   const params = useParams();
   const id = Number(params?.id);
-  const product = products.find((p) => p.id === id);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const { addToCart, cart, updateQuantity, removeFromCart } = useCart();
   const { isAuthenticated } = useAuth();
   const router = useRouter();
 
-  const [selectedSize, setSelectedSize] = useState(product?.sizes?.[0] || null);
+  const [selectedSize, setSelectedSize] = useState<any>(null);
   const [qty, setQty] = useState(1);
   const [showModal, setShowModal] = useState(false);
 
-  if (!product) return <div className="p-6 text-red-500">Không tìm thấy sản phẩm.</div>;
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const [productData, productsData] = await Promise.all([
+          getProduct(id),
+          getProducts()
+        ]);
+        setProduct(productData);
+        setAllProducts(productsData);
+        setSelectedSize(productData.sizes?.[0] || null);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch product:', err);
+        setError('Không thể tải sản phẩm. Vui lòng thử lại sau.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (id) {
+      fetchData();
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-gray-600">Đang tải sản phẩm...</p>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-red-500">{error || 'Không tìm thấy sản phẩm.'}</p>
+      </div>
+    );
+  }
 
   const handleAddCart = () => {
     if (!isAuthenticated) {
@@ -51,7 +94,7 @@ export default function ProductDetail() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <Image src={product.img} width={500} height={400} alt={product.name} className="rounded-lg shadow-lg" />
         <div>
-          <h1 className="text-3xl font-bold">{product.name}</h1>
+          <h1 className="text-3xl text-pink-500 font-bold">{product.name}</h1>
 
           <label className="block font-medium mt-4">Kích thước:</label>
           <div className="flex gap-3">
@@ -77,7 +120,7 @@ export default function ProductDetail() {
           </div>
 
           <p className="text-pink-600 font-bold text-xl mt-3">
-            {selectedSize ? (selectedSize.price * qty).toLocaleString() : "0"} VND
+            {selectedSize ? formatPrice(selectedSize.price * qty) : formatPrice(0)}
           </p>
 <p className="mt-5 text-gray-600">{product.description}</p>
          <div className="flex gap-3 mt-4">
@@ -120,7 +163,7 @@ export default function ProductDetail() {
         </div>
       </div>
       <div className="justify-center mt-3">
-  <h2 className="font-bold text-xl mb-2">Lưu ý quan trọng:</h2>
+  <h2 className="font-bold text-pink-500 text-xl mb-2">Lưu ý quan trọng:</h2>
   <p>Điện thoại: 0767218023 | Zalo: 0767218023</p>
   <p>Bánh kem tươi – làm mới và giao ngay trong ngày!</p>
   <p>Khi đặt bánh, vui lòng ghi chú thời gian mong muốn nhận hàng ở trang giỏ hàng. Sau khi đặt đơn, giữ điện thoại thông suốt, nhân viên CSKH sẽ liên hệ nếu có vấn đề.</p>
@@ -142,16 +185,16 @@ export default function ProductDetail() {
 {/* Sản phẩm tương tự */}
 
 <div className="mt-2">
-  <h2 className="text-2xl font-bold mb-2">Sản phẩm tương tự</h2>
+  <h2 className="text-2xl text-pink-500 font-bold mb-2">Sản phẩm tương tự</h2>
    <p className="text-gray-600 mb-6"> SweetDream chuyên các loại bánh ngọt thơm ngon, được làm từ nguyên liệu tươi sạch và công thức độc quyền. Khách hàng có thể lựa chọn từ bánh mousse, tiramisu, bánh kem, đến bánh mì ngọt. Hãy khám phá và thêm vào giỏ hàng những món bánh yêu thích! </p>
   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-    {products
-      .filter((p) => p.category === product.category && p.id !== product.id)
+    {allProducts
+      .filter((p) => p.category.id === product.category.id && p.id !== product.id)
       .slice(0, 8) // hiển thị tối đa 8 sản phẩm tương tự
       .map((p) => (
         <div 
           key={p.id} 
-          className="border rounded-lg p-3 hover:shadow-lg cursor-pointer transition-shadow"
+          className="rounded-lg p-4 hover:shadow-[0_10px_15px_rgba(249,168,212,0.5)]"
           onClick={() => router.push(`/product/${p.id}`)}
         >
           <Image
@@ -161,9 +204,9 @@ export default function ProductDetail() {
             height={180}
             className="rounded-lg mb-2 object-cover"
           />
-          <h3 className="font-semibold">{p.name}</h3>
-          <p className="text-pink-500 font-bold">
-            {p.sizes && p.sizes.length > 0 ? p.sizes[0].price.toLocaleString() : "0"} VND
+          <h3 className="text-center">{p.name}</h3>
+          <p className="text-pink-500 text-center">
+            {p.sizes && p.sizes.length > 0 ? formatPrice(p.sizes[0].price) : 'N/A'}
           </p>
         </div>
       ))}
@@ -172,12 +215,12 @@ export default function ProductDetail() {
 
 {/* Tất cả sản phẩm (tối đa 20) */}
 <div className="mt-6">
-  <h2 className="text-2xl font-bold mb-2">Khám phá cửa hàng</h2>
+  <h2 className="text-2xl text-pink-500 font-bold mb-2">Khám phá cửa hàng</h2>
   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-    {products.slice(0, 20).map((p) => (
+    {allProducts.slice(0, 20).map((p) => (
       <div 
         key={p.id} 
-        className="border rounded-lg p-3 hover:shadow-lg cursor-pointer transition-shadow"
+        className="rounded-lg p-4 hover:shadow-[0_10px_15px_rgba(249,168,212,0.5)]"
         onClick={() => router.push(`/product/${p.id}`)}
       >
         <Image
@@ -187,9 +230,9 @@ export default function ProductDetail() {
           height={180}
           className="rounded-lg mb-2 object-cover"
         />
-        <h3 className="font-semibold">{p.name}</h3>
-        <p className="text-pink-500 font-bold">
-          {p.sizes && p.sizes.length > 0 ? p.sizes[0].price.toLocaleString() : "0"} VND
+        <h3 className="text-center">{p.name}</h3>
+        <p className="text-pink-500 text-center">
+          {p.sizes && p.sizes.length > 0 ? formatPrice(p.sizes[0].price) : 'N/A'}
         </p>
       </div>
     ))}
@@ -201,9 +244,9 @@ export default function ProductDetail() {
         <div className="fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] shadow-lg">
             {/* Modal Header */}
-            <div className="p-6 border-b bg-pink-50">
+            <div className="p-3 border-b bg-pink-50">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center">
                   <div>
                     <h2 className="text-xl font-bold text-gray-800">Đã thêm vào giỏ hàng!</h2>
                     <p className="text-sm text-gray-600">
@@ -213,7 +256,7 @@ export default function ProductDetail() {
                 </div>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                  className="text-gray-400 hover:text-gray-600 text-xl"
                 >
                   ✕
                 </button>
@@ -240,8 +283,8 @@ export default function ProductDetail() {
                     />
                     <div>
                       <p className="font-medium text-gray-800 text-sm">{item.name}</p>
-                      <p className="text-pink-500 font-bold text-sm">
-                        {item.price.toLocaleString()} VND
+                      <p className="text-pink-500 text-xs">
+                        {formatPrice(item.price)}
                       </p>
                       
                       {/* Quantity Controls */}
@@ -266,13 +309,13 @@ export default function ProductDetail() {
                   {/* Item Total and Remove */}
                   <div className="text-right">
                     <p className="font-bold text-pink-600 text-sm mb-1">
-                      {(item.price * item.qty).toLocaleString()} VND
+                      {formatPrice(item.price * item.qty)}
                     </p>
                     <button
                       onClick={() => removeFromCart(item.id)}
                       className="text-red-500 hover:text-red-700 text-sm"
                     >
-                      ❌
+                      Xóa
                     </button>
                   </div>
                 </div>
@@ -285,7 +328,7 @@ export default function ProductDetail() {
                 <div className="flex justify-between items-center text-lg font-bold text-pink-600">
                   <span>Tổng cộng:</span>
                   <span>
-                    {cart.reduce((sum, item) => sum + item.price * item.qty, 0).toLocaleString()} VND
+                    {formatPrice(cart.reduce((sum, item) => sum + item.price * item.qty, 0))}
                   </span>
                 </div>
               </div>

@@ -5,7 +5,8 @@
  * No local JSON files are used.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Always use /api/proxy for consistency
+const API_URL = '/api/proxy';
 
 // Types
 export interface ProductSize {
@@ -75,10 +76,14 @@ class APIError extends Error {
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   try {
+    // Get auth token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('sweetdream_token') : null;
+    
     const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options?.headers,
       },
     });
@@ -93,7 +98,8 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     if (error instanceof APIError) {
       throw error;
     }
-    throw new Error(`Failed to fetch ${endpoint}: ${error.message}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to fetch ${endpoint}: ${message}`);
   }
 }
 
@@ -105,21 +111,21 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
  * Get all products with categories and sizes
  */
 export async function getProducts(): Promise<Product[]> {
-  return fetchAPI<Product[]>('/api/products');
+  return fetchAPI<Product[]>('/products');
 }
 
 /**
  * Get a single product by ID
  */
 export async function getProduct(id: number): Promise<Product> {
-  return fetchAPI<Product>(`/api/products/${id}`);
+  return fetchAPI<Product>(`/products/${id}`);
 }
 
 /**
  * Get products by category ID
  */
 export async function getProductsByCategory(categoryId: number): Promise<Product[]> {
-  return fetchAPI<Product[]>(`/api/products/category/${categoryId}`);
+  return fetchAPI<Product[]>(`/products/category/${categoryId}`);
 }
 
 // ============================================
@@ -130,14 +136,14 @@ export async function getProductsByCategory(categoryId: number): Promise<Product
  * Get all categories with product counts
  */
 export async function getCategories(): Promise<Category[]> {
-  return fetchAPI<Category[]>('/api/categories');
+  return fetchAPI<Category[]>('/categories');
 }
 
 /**
  * Get a single category with its products
  */
 export async function getCategory(id: number): Promise<Category & { products: Product[] }> {
-  return fetchAPI<Category & { products: Product[] }>(`/api/categories/${id}`);
+  return fetchAPI<Category & { products: Product[] }>(`/categories/${id}`);
 }
 
 // ============================================
@@ -162,7 +168,7 @@ export async function createOrder(orderData: {
   }>;
   notes?: string;
 }): Promise<Order> {
-  return fetchAPI<Order>('/api/orders', {
+  return fetchAPI<Order>('/orders', {
     method: 'POST',
     body: JSON.stringify(orderData),
   });
@@ -172,14 +178,14 @@ export async function createOrder(orderData: {
  * Get order by ID
  */
 export async function getOrder(id: number): Promise<Order> {
-  return fetchAPI<Order>(`/api/orders/${id}`);
+  return fetchAPI<Order>(`/orders/${id}`);
 }
 
 /**
  * Get orders by customer email
  */
 export async function getOrdersByEmail(email: string): Promise<Order[]> {
-  return fetchAPI<Order[]>(`/api/orders/customer/${encodeURIComponent(email)}`);
+  return fetchAPI<Order[]>(`/orders/customer/${encodeURIComponent(email)}`);
 }
 
 // ============================================
@@ -195,7 +201,7 @@ export async function getOrCreateCustomer(customerData: {
   phone?: string;
   address?: string;
 }): Promise<Customer> {
-  return fetchAPI<Customer>('/api/customers', {
+  return fetchAPI<Customer>('/customers', {
     method: 'POST',
     body: JSON.stringify(customerData),
   });
@@ -205,7 +211,7 @@ export async function getOrCreateCustomer(customerData: {
  * Get customer by email
  */
 export async function getCustomerByEmail(email: string): Promise<Customer> {
-  return fetchAPI<Customer>(`/api/customers/email/${encodeURIComponent(email)}`);
+  return fetchAPI<Customer>(`/customers/email/${encodeURIComponent(email)}`);
 }
 
 // ============================================
@@ -213,13 +219,10 @@ export async function getCustomerByEmail(email: string): Promise<Customer> {
 // ============================================
 
 /**
- * Format price to Vietnamese currency
+ * Format price to Vietnamese currency (15.000đ format)
  */
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-  }).format(price);
+  return price.toLocaleString('vi-VN') + 'đ';
 }
 
 /**

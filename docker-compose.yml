@@ -1,0 +1,111 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: sweetdream-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sweetdream
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d sweetdream"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sweetdream-network
+
+  # User Service (Registration & Authentication)
+  user-service:
+    build: ./user-service
+    image: user-service
+    container_name: sweetdream-user-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DATABASE_URL: postgresql://dev:dev123@postgres:5432/sweetdream
+      JWT_SECRET: local-dev-secret-key-change-in-production
+      JWT_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sweetdream-network
+
+  # Order Service (Order Processing)
+  order-service:
+    build: ./order-service
+    image: order-service
+    container_name: sweetdream-order-service
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DATABASE_URL: postgresql://dev:dev123@postgres:5432/sweetdream
+      USER_SERVICE_URL: http://user-service:3003
+      FRONTEND_URL: http://localhost:3000
+    depends_on:
+      - postgres
+      - user-service
+    networks:
+      - sweetdream-network
+
+  # Original Backend (Products & Categories)
+  backend:
+    build: ./be
+    image: backend
+    container_name: sweetdream-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://dev:dev123@postgres:5432/sweetdream
+      JWT_SECRET: local-dev-secret-key-change-in-production
+      JWT_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sweetdream-network
+
+  # Frontend
+  frontend:
+    build: ./fe
+    image: frontend
+    container_name: sweetdream-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: /api/proxy
+      BACKEND_API_URL: http://backend:3001
+      USER_SERVICE_URL: http://user-service:3003
+      ORDER_SERVICE_URL: http://order-service:3002
+    depends_on:
+      - backend
+      - user-service
+      - order-service
+    networks:
+      - sweetdream-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sweetdream-network:
+    driver: bridge

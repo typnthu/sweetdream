@@ -32,3 +32,51 @@ resource "aws_service_discovery_service" "backend" {
     Name = "SweetDream Backend Service Discovery"
   }
 }
+
+# Service Discovery Service for User Service
+resource "aws_service_discovery_service" "user_service" {
+  name = "user-service"
+
+  dns_config {
+    namespace_id = aws_service_discovery_private_dns_namespace.main.id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+
+  tags = {
+    Name = "SweetDream User Service Discovery"
+  }
+}
+
+# Service Discovery Service for Order Service
+resource "aws_service_discovery_service" "order_service" {
+  name = "order-service"
+
+  dns_config {
+    namespace_id = aws_service_discovery_private_dns_namespace.main.id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+
+  tags = {
+    Name = "SweetDream Order Service Discovery"
+  }
+}

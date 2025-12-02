@@ -28,6 +28,16 @@ variable "frontend_image" {
   default     = "nginx:latest"
 }
 
+variable "user_service_image" {
+  description = "Docker image for the user service"
+  default     = "nginx:latest"
+}
+
+variable "order_service_image" {
+  description = "Docker image for the order service"
+  default     = "nginx:latest"
+}
+
 variable "db_name" {
   description = "Database name"
   default     = "sweetdream"
@@ -35,7 +45,7 @@ variable "db_name" {
 
 variable "db_username" {
   description = "Database username"
-  default     = "admin"
+  default     = "postgres"
   sensitive   = true
 }
 
@@ -49,7 +59,58 @@ variable "s3_bucket_name" {
   default     = "sweetdream-logs-data"
 }
 
-variable "s3_products_bucket_name" {
-  description = "S3 bucket name for product images"
-  default     = "sweetdream-products"
+# CloudWatch Monitoring
+variable "alert_email" {
+  description = "Email address for CloudWatch alarm notifications"
+  type        = string
+  default     = "dtminhthu19022004@gmail.com"
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, production)"
+  type        = string
+  default     = "production"
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "enable_customer_analytics" {
+  description = "Enable customer analytics queries in CloudWatch Insights"
+  type        = bool
+  default     = false
+}
+
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 7
+}
+
+variable "analytics_bucket_prefix" {
+  description = "Prefix for analytics S3 bucket names (must be globally unique)"
+  type        = string
+  default     = "sweetdream-analytics"
+}
+
+# Deployment Configuration
+variable "deployment_minimum_healthy_percent" {
+  description = "Minimum healthy percent during deployment"
+  type        = number
+  default     = 50
+}
+
+variable "deployment_maximum_percent" {
+  description = "Maximum percent during deployment"
+  type        = number
+  default     = 200
+}
+
+variable "enable_bastion" {
+  description = "Enable bastion host for RDS access"
+  type        = bool
+  default     = false
 }

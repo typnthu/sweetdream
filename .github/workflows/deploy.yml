@@ -1,257 +1,525 @@
-name: Deploy Application
+name: Deploy to AWS
 
 on:
   push:
-    branches:
-      - dev
-      - main
+    branches: [master, dev]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - production
+          - development
+        default: 'development'
+      force_deploy:
+        description: 'Force deploy all services (ignore change detection)'
+        type: boolean
+        default: false
 
 env:
   AWS_REGION: us-east-1
-  ECR_BACKEND_REPOSITORY: sweetdream-backend
-  ECR_FRONTEND_REPOSITORY: sweetdream-frontend
   ECS_CLUSTER: sweetdream-cluster
-  ECS_BACKEND_SERVICE: sweetdream-service-backend
-  ECS_FRONTEND_SERVICE: sweetdream-service-frontend
-  ECS_BACKEND_TASK_DEFINITION: sweetdream-task-backend
-  ECS_FRONTEND_TASK_DEFINITION: sweetdream-task-frontend
+  TERRAFORM_VERSION: '1.6.0'
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-  build-and-push-backend:
-    name: Build & Push Backend
+  # Detect changes
+  changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
     outputs:
-      image: ${{ steps.build-backend-image.outputs.image }}
-    
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      order-service: ${{ steps.filter.outputs.order-service }}
+      user-service: ${{ steps.filter.outputs.user-service }}
+      terraform: ${{ steps.filter.outputs.terraform }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          filters: |
+            backend:
+              - 'be/**'
+            frontend:
+              - 'fe/**'
+            order-service:
+              - 'order-service/**'
+            user-service:
+              - 'user-service/**'
+            terraform:
+              - 'terraform/**'
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Create ECR repository if not exists
-        run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_BACKEND_REPOSITORY }} || \
-          aws ecr create-repository \
-            --repository-name ${{ env.ECR_BACKEND_REPOSITORY }} \
-            --image-scanning-configuration scanOnPush=true \
-            --encryption-configuration encryptionType=AES256
-
-      - name: Build, tag, and push backend image
-        id: build-backend-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          cd be
-          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-  build-and-push-frontend:
-    name: Build & Push Frontend
+  # Deploy infrastructure
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true' || github.event.inputs.force_deploy == 'true'
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    outputs:
-      image: ${{ steps.build-frontend-image.outputs.image }}
-    
+    timeout-minutes: 45
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+    defaults:
+      run:
+        working-directory: terraform
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Create ECR repository if not exists
-        run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_FRONTEND_REPOSITORY }} || \
-          aws ecr create-repository \
-            --repository-name ${{ env.ECR_FRONTEND_REPOSITORY }} \
-            --image-scanning-configuration scanOnPush=true \
-            --encryption-configuration encryptionType=AES256
-
-      - name: Build, tag, and push frontend image
-        id: build-frontend-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-          NEXT_PUBLIC_API_URL: ${{ secrets.BACKEND_API_URL }}
-        run: |
-          cd fe
-          docker build \
-            --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-            -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-  deploy-backend:
-    name: Deploy Backend to ECS
-    runs-on: ubuntu-latest
-    needs: build-and-push-backend
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      
+      - uses: hashicorp/setup-terraform@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download backend task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_BACKEND_TASK_DEFINITION }} \
-            --query taskDefinition > backend-task-definition.json
-
-      - name: Fill in the new image ID in the backend task definition
-        id: backend-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: backend-task-definition.json
-          container-name: sweetdream-backend
-          image: ${{ needs.build-and-push-backend.outputs.image }}
-
-      - name: Deploy backend to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.backend-task-def.outputs.task-definition }}
-          service: ${{ env.ECS_BACKEND_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-  deploy-frontend:
-    name: Deploy Frontend to ECS
-    runs-on: ubuntu-latest
-    needs: [build-and-push-frontend, deploy-backend]
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download frontend task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_FRONTEND_TASK_DEFINITION }} \
-            --query taskDefinition > frontend-task-definition.json
-
-      - name: Fill in the new image ID in the frontend task definition
-        id: frontend-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: frontend-task-definition.json
-          container-name: sweetdream-frontend
-          image: ${{ needs.build-and-push-frontend.outputs.image }}
-
-      - name: Deploy frontend to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.frontend-task-def.outputs.task-definition }}
-          service: ${{ env.ECS_FRONTEND_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-  run-migrations:
-    name: Run Database Migrations
-    runs-on: ubuntu-latest
-    needs: deploy-backend
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get ECS task ARN
-        id: get-task
-        run: |
-          TASK_ARN=$(aws ecs list-tasks \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service-name ${{ env.ECS_BACKEND_SERVICE }} \
-            --desired-status RUNNING \
-            --query 'taskArns[0]' \
-            --output text)
-          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
-
-      - name: Run migrations via ECS Exec
-        run: |
-          aws ecs execute-command \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --task ${{ steps.get-task.outputs.task_arn }} \
-            --container sweetdream-backend \
-            --interactive \
-            --command "npm run migrate"
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Validate
+        run: terraform validate
+      
+      - name: Cleanup conflicting resources (if analytics enabled)
+        if: vars.ENABLE_ANALYTICS == 'true'
         continue-on-error: true
+        run: |
+          echo "🧹 Cleaning up conflicting resources..."
+          
+          # Only delete if they exist outside Terraform state
+          # Check if resources exist in state first
+          if ! terraform state list | grep -q "module.backend_analytics"; then
+            echo "Resources not in state, cleaning up manually created ones..."
+            
+            # Delete CloudWatch query definitions that conflict
+            QUERIES=$(aws logs describe-query-definitions \
+              --query 'queryDefinitions[?contains(name, `sweetdream-service`)].queryDefinitionId' \
+              --output text 2>/dev/null || echo "")
+            
+            if [ ! -z "$QUERIES" ]; then
+              echo "Found conflicting CloudWatch queries, deleting..."
+              for query_id in $QUERIES; do
+                aws logs delete-query-definition --query-definition-id "$query_id" 2>/dev/null || true
+              done
+            fi
+            
+            # Delete IAM roles if they exist
+            aws iam delete-role-policy \
+              --role-name sweetdream-service-backend-export-lambda-role \
+              --policy-name sweetdream-service-backend-export-lambda-policy \
+              2>/dev/null || true
+            
+            aws iam delete-role \
+              --role-name sweetdream-service-backend-export-lambda-role \
+              2>/dev/null || true
+            
+            aws iam delete-role-policy \
+              --role-name sweetdream-service-order-service-export-lambda-role \
+              --policy-name sweetdream-service-order-service-export-lambda-policy \
+              2>/dev/null || true
+            
+            aws iam delete-role \
+              --role-name sweetdream-service-order-service-export-lambda-role \
+              2>/dev/null || true
+            
+            echo "✅ Cleanup complete, waiting 10 seconds..."
+            sleep 10
+          else
+            echo "Resources already in Terraform state, skipping cleanup"
+          fi
+      
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
+            -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
+            -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
+            -var="analytics_bucket_prefix=${{ vars.ANALYTICS_BUCKET_PREFIX || 'sweetdream-analytics' }}" \
+            -out=tfplan
+      
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve tfplan
+          
+          echo "## Infrastructure Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ VPC, ECS Cluster, RDS, ALB, and all modules deployed" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ vars.ENABLE_ANALYTICS }}" = "true" ]; then
+            echo "✅ Analytics Lambda functions deployed" >> $GITHUB_STEP_SUMMARY
+          fi
 
-  deployment-summary:
-    name: Deployment Summary
+  # Build and deploy services
+  deploy-services:
+    name: Deploy Services
+    needs: [changes, deploy-infrastructure]
+    if: |
+      always() && !cancelled() &&
+      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
+      (needs.changes.outputs.backend == 'true' || 
+       needs.changes.outputs.frontend == 'true' || 
+       needs.changes.outputs.order-service == 'true' || 
+       needs.changes.outputs.user-service == 'true' ||
+       github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, run-migrations]
-    if: always()
-    
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            path: be
+            port: 3001
+            changed: ${{ needs.changes.outputs.backend }}
+          - name: frontend
+            path: fe
+            port: 3000
+            changed: ${{ needs.changes.outputs.frontend }}
+          - name: order-service
+            path: order-service
+            port: 3002
+            changed: ${{ needs.changes.outputs.order-service }}
+          - name: user-service
+            path: user-service
+            port: 3003
+            changed: ${{ needs.changes.outputs.user-service }}
+      fail-fast: false
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Check if deployment needed
+        id: check
+        run: |
+          if [[ "${{ matrix.service.changed }}" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo " Deploying ${{ matrix.service.name }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo " Skipping ${{ matrix.service.name }} (no changes)" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.deploy == 'true'
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check.outputs.deploy == 'true'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
+      
+      - uses: aws-actions/amazon-ecr-login@v2
+        if: steps.check.outputs.deploy == 'true'
+        id: ecr
+      
       - name: Get ALB URL
-        id: get-alb
+        if: steps.check.outputs.deploy == 'true' && matrix.service.name == 'frontend'
+        id: alb
         run: |
-          cd terraform
-          ALB_URL=$(terraform output -raw alb_url 2>/dev/null || echo "Not available")
-          echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
-        continue-on-error: true
+          ALB_URL=$(aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' \
+            --output text)
+          echo "url=$ALB_URL" >> $GITHUB_OUTPUT
+      
+      - name: Build & Push Docker Image
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_NAME=$ECR_REGISTRY/sweetdream-${{ matrix.service.name }}
+          
+          # Build with appropriate args
+          if [[ "${{ matrix.service.name }}" == "frontend" ]]; then
+            docker build \
+              --build-arg NEXT_PUBLIC_API_URL=http://${{ steps.alb.outputs.url }} \
+              -t $IMAGE_NAME:latest \
+              -t $IMAGE_NAME:$IMAGE_TAG \
+              ./${{ matrix.service.path }}
+          else
+            docker build \
+              -t $IMAGE_NAME:latest \
+              -t $IMAGE_NAME:$IMAGE_TAG \
+              ./${{ matrix.service.path }}
+          fi
+          
+          # Push both tags
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:$IMAGE_TAG
+          
+          echo "✅ Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
 
+  # Update task definitions with Terraform after images are pushed
+  update-task-definitions:
+    name: Update Task Definitions
+    needs: [changes, deploy-services]
+    if: |
+      always() && !cancelled() &&
+      needs.deploy-services.result == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Apply (Update Task Definitions)
+        run: |
+          terraform apply -auto-approve \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
+            -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
+            -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
+            -var="analytics_bucket_prefix=${{ vars.ANALYTICS_BUCKET_PREFIX || 'sweetdream-analytics' }}"
+          
+          echo "✅ Task definitions updated with new ECR images" >> $GITHUB_STEP_SUMMARY
+
+  # Force ECS to use updated task definitions
+  redeploy-services:
+    name: Redeploy Services
+    needs: [changes, update-task-definitions]
+    if: |
+      always() && !cancelled() &&
+      needs.update-task-definitions.result == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            changed: ${{ needs.changes.outputs.backend }}
+          - name: frontend
+            changed: ${{ needs.changes.outputs.frontend }}
+          - name: order-service
+            changed: ${{ needs.changes.outputs.order-service }}
+          - name: user-service
+            changed: ${{ needs.changes.outputs.user-service }}
+      fail-fast: false
+    steps:
+      - name: Check if deployment needed
+        id: check
+        run: |
+          if [[ "${{ matrix.service.changed }}" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check.outputs.deploy == 'true'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to ECS
+        if: steps.check.outputs.deploy == 'true'
+        run: |
+          SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
+          
+          echo "🚀 Deploying $SERVICE_NAME..."
+          
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service $SERVICE_NAME \
+            --force-new-deployment \
+            --no-cli-pager
+          
+          echo "✅ $SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Wait for deployment
+        if: steps.check.outputs.deploy == 'true'
+        run: |
+          SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
+          
+          echo "⏳ Waiting for $SERVICE_NAME to stabilize..."
+          
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services $SERVICE_NAME \
+            --no-cli-pager
+          
+          echo "✅ $SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
+
+  # Verify analytics deployment
+  verify-analytics:
+    name: Verify Analytics
+    needs: [deploy-infrastructure]
+    if: |
+      always() && !cancelled() &&
+      needs.deploy-infrastructure.result == 'success' &&
+      vars.ENABLE_ANALYTICS == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Verify Lambda Functions
+        id: verify
+        run: |
+          echo "🔍 Verifying Analytics Lambda deployment..."
+          
+          BACKEND_LAMBDA=$(aws lambda get-function \
+            --function-name sweetdream-service-backend-export-logs \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          ORDER_LAMBDA=$(aws lambda get-function \
+            --function-name sweetdream-service-order-service-export-logs \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          echo "backend_lambda=$BACKEND_LAMBDA" >> $GITHUB_OUTPUT
+          echo "order_lambda=$ORDER_LAMBDA" >> $GITHUB_OUTPUT
+          
+          echo "## 📊 Analytics Lambda Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Function | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Export | $BACKEND_LAMBDA |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Export | $ORDER_LAMBDA |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Test Lambda Functions
+        if: steps.verify.outputs.backend_lambda != 'NOT_FOUND'
+        run: |
+          echo "🧪 Testing Lambda functions..."
+          
+          # Test backend Lambda (empty payload - exports today's logs)
+          aws lambda invoke \
+            --function-name sweetdream-service-backend-export-logs \
+            --payload '{}' \
+            --cli-binary-format raw-in-base64-out \
+            response-backend.json
+          
+          # Test order Lambda (empty payload - exports today's logs)
+          aws lambda invoke \
+            --function-name sweetdream-service-order-service-export-logs \
+            --payload '{}' \
+            --cli-binary-format raw-in-base64-out \
+            response-order.json
+          
+          echo "### 🧪 Lambda Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Backend:**" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat response-backend.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Order:**" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat response-order.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Deployment summary
+  summary:
+    name: Deployment Summary
+    needs: [changes, deploy-infrastructure, deploy-services, verify-analytics]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Get Deployment Info
+        id: info
+        run: |
+          ALB_URL=$(aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' \
+            --output text)
+          echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
+          
+          # Get service statuses
+          SERVICES=("backend" "frontend" "order-service" "user-service")
+          for service in "${SERVICES[@]}"; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --services sweetdream-service-$service \
+              --query 'services[0].deployments[0].rolloutState' \
+              --output text 2>/dev/null || echo "NOT_FOUND")
+            echo "${service}_status=$STATUS" >> $GITHUB_OUTPUT
+          done
+      
+      - name: Check Analytics Status
+        id: analytics
+        if: vars.ENABLE_ANALYTICS == 'true'
+        run: |
+          BACKEND_LAMBDA=$(aws lambda get-function \
+            --function-name sweetdream-service-backend-export-logs \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          ORDER_LAMBDA=$(aws lambda get-function \
+            --function-name sweetdream-service-order-service-export-logs \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$BACKEND_LAMBDA" != "NOT_FOUND" ] && [ "$ORDER_LAMBDA" != "NOT_FOUND" ]; then
+            echo "status=✅ Deployed" >> $GITHUB_OUTPUT
+          else
+            echo "status=❌ Failed" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Create Summary
         run: |
-          echo "## Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Environment" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment**: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Development' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📊 Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Infrastructure | ${{ needs.deploy-infrastructure.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ steps.info.outputs.backend_status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ steps.info.outputs.frontend_status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Service | ${{ steps.info.outputs.order-service_status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| User Service | ${{ steps.info.outputs.user-service_status }} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ vars.ENABLE_ANALYTICS }}" = "true" ]; then
+            echo "| Analytics Lambda | ${{ steps.analytics.outputs.status || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Services" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backend**: ${{ needs.deploy-backend.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Frontend**: ${{ needs.deploy-frontend.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Migrations**: ${{ needs.run-migrations.result }}" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 🌐 Access" >> $GITHUB_STEP_SUMMARY
+          echo "- **Application URL**: http://${{ steps.info.outputs.alb_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Access" >> $GITHUB_STEP_SUMMARY
-          echo "- **Application URL**: Check Terraform outputs or AWS Console" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📦 Changes Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ${{ needs.changes.outputs.backend == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ needs.changes.outputs.frontend == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Order Service: ${{ needs.changes.outputs.order-service == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- User Service: ${{ needs.changes.outputs.user-service == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform: ${{ needs.changes.outputs.terraform == 'true' && '✅' || '⏭️' }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ vars.ENABLE_ANALYTICS }}" = "true" ]; then
+            echo "- Analytics: ${{ needs.verify-analytics.result == 'success' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          fi
+

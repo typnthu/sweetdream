@@ -92,7 +92,7 @@ async function seed() {
         // img field from JSON already contains full S3 URL
         const product = await prisma.product.create({
           data: {
-            id: id,
+            // Don't set id - let database auto-generate it
             name: productData.name,
             description: productData.description,
             img: productData.img, // Use S3 URL from JSON file
@@ -126,6 +126,23 @@ async function seed() {
     console.log(`✅ Success: ${successCount} products`);
     console.log(`❌ Errors: ${errorCount} products`);
     console.log('='.repeat(60));
+
+    // Create default admin user
+    console.log('\n👤 Creating default admin user...');
+    const bcrypt = require('bcrypt');
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    
+    const admin = await prisma.customer.upsert({
+      where: { email: 'admin@sweetdream.com' },
+      update: { role: 'ADMIN' },
+      create: {
+        email: 'admin@sweetdream.com',
+        password: adminPassword,
+        name: 'Admin',
+        role: 'ADMIN'
+      }
+    });
+    console.log(`✅ Admin user created: ${admin.email}`);
 
     // Display categories
     const categories = await prisma.category.findMany({

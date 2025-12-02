@@ -1,29 +1,16 @@
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/sweetdream"
-  retention_in_days = 7
+# CloudWatch Log Group (using separate module for easier management)
+module "cloudwatch_logs" {
+  source = "../cloudwatch-logs"
 
-  lifecycle {
-    prevent_destroy = false
-    ignore_changes  = []
-  }
-
-  tags = {
-    Name = "SweetDream ECS Logs"
-  }
-}
-
-# ECS Cluster
-resource "aws_ecs_cluster" "main" {
-  name = var.cluster_name
-
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
+  log_group_name           = "/ecs/sweetdream-${var.service_name}"
+  service_name             = var.service_name
+  retention_days           = var.log_retention_days
+  enable_analytics_queries = var.enable_analytics_queries
 
   tags = {
-    Name = "SweetDream ECS Cluster"
+    Name        = "SweetDream ECS Logs - ${var.service_name}"
+    Service     = var.service_name
+    Environment = var.environment
   }
 }
 
@@ -34,8 +21,12 @@ resource "aws_ecs_task_definition" "app" {
   task_role_arn            = var.task_role_arn
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = tostring(var.task_cpu)
+  memory                   = tostring(var.task_memory)
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   container_definitions = jsonencode([{
     name      = var.container_name
@@ -49,6 +40,10 @@ resource "aws_ecs_task_definition" "app" {
 
     environment = concat(
       var.db_host != "" ? [
+        {
+          name  = "DATABASE_URL"
+          value = "postgresql://${var.db_username}:${var.db_password}@${var.db_host}/${var.db_name}"
+        },
         {
           name  = "DB_HOST"
           value = var.db_host
@@ -74,10 +69,24 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "BACKEND_API_URL"
           value = var.backend_url
-        },
+        }
+      ] : [],
+      var.user_service_url != "" ? [
+        {
+          name  = "USER_SERVICE_URL"
+          value = var.user_service_url
+        }
+      ] : [],
+      var.order_service_url != "" ? [
+        {
+          name  = "ORDER_SERVICE_URL"
+          value = var.order_service_url
+        }
+      ] : [],
+      var.backend_url != "" || var.user_service_url != "" || var.order_service_url != "" ? [
         {
           name  = "NEXT_PUBLIC_API_URL"
-          value = var.backend_url
+          value = "/api/proxy"
         }
       ] : []
     )
@@ -85,7 +94,7 @@ resource "aws_ecs_task_definition" "app" {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        "awslogs-group"         = aws_cloudwatch_log_group.app.name
+        "awslogs-group"         = module.cloudwatch_logs.log_group_name
         "awslogs-region"        = "us-east-1"
         "awslogs-stream-prefix" = "ecs"
       }
@@ -100,9 +109,9 @@ resource "aws_ecs_task_definition" "app" {
 # ECS Service
 resource "aws_ecs_service" "app" {
   name            = var.service_name
-  cluster         = aws_ecs_cluster.main.id
+  cluster         = var.cluster_id
   task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 2
+  desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
   deployment_maximum_percent         = 200
@@ -137,9 +146,9 @@ resource "aws_ecs_service" "app" {
 
 # Auto Scaling Target
 resource "aws_appautoscaling_target" "ecs" {
-  max_capacity       = 10
-  min_capacity       = 2
-  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.app.name}"
+  max_capacity       = var.max_capacity
+  min_capacity       = var.min_capacity
+  resource_id        = "service/${var.cluster_name}/${aws_ecs_service.app.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }

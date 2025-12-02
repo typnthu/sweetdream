@@ -10,7 +10,7 @@ export default function Header() {
           Chào mừng đến với SweetDreams 🍰
         </h2> */}
 
-        <p className="text-2xl font-bold text-pink-700">Ngọt ngào mỗi ngày🍓</p>
+        <p className="text-2xl font-bold text-pink-700">Ngọt ngào mỗi ngày</p>
         {/* <p className="text-gray-600 max-w-lg mb-4 text-base">
           Tiệm bánh ngọt xinh xắn với những chiếc bánh tươi ngon mỗi ngày,
           đem đến hương vị ngọt ngào cho mọi khoảnh khắc của bạn!

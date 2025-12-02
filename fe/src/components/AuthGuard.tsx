@@ -14,15 +14,27 @@ export default function AuthGuard({
   redirectTo = "/login",
   showLoginPrompt = false 
 }: AuthGuardProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isAuthenticated && !showLoginPrompt) {
+    if (!isLoading && !isAuthenticated && !showLoginPrompt) {
       const currentPath = window.location.pathname;
       router.push(`${redirectTo}?redirect=${encodeURIComponent(currentPath)}`);
     }
-  }, [isAuthenticated, redirectTo, router, showLoginPrompt]);
+  }, [isAuthenticated, isLoading, redirectTo, router, showLoginPrompt]);
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Đang tải...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated && showLoginPrompt) {
     return (

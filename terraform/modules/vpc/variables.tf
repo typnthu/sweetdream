@@ -8,3 +8,9 @@ variable "alb_security_group_id" {
   type        = string
   default     = ""
 }
+
+variable "aws_region" {
+  description = "AWS region for VPC endpoints"
+  type        = string
+  default     = "us-east-1"
+}

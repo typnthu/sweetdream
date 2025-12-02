@@ -58,7 +58,13 @@ function LoginForm() {
       }
 
       if (success) {
-        router.push(redirectTo);
+        // Check if user is admin and redirect accordingly
+        const userData = JSON.parse(localStorage.getItem('sweetdream_user') || '{}');
+        if (userData.role === 'admin') {
+          router.push('/admin'); // Admin goes to admin panel
+        } else {
+          router.push(redirectTo); // Customer goes to original destination
+        }
       }
     } catch (error) {
       setError("Có lỗi xảy ra, vui lòng thử lại!");
@@ -82,15 +88,6 @@ function LoginForm() {
             {isLogin ? "Chào mừng bạn trở lại!" : "Tạo tài khoản mới"}
           </p>
         </div>
-
-        {/* Demo Account Info */}
-        {isLogin && (
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-700 font-medium mb-2">Tài khoản demo:</p>
-            <p className="text-sm text-blue-600">Email: user@example.com</p>
-            <p className="text-sm text-blue-600">Mật khẩu: 123456</p>
-          </div>
-        )}
 
         {/* Error Message */}
         {error && (
