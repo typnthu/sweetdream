@@ -38,6 +38,10 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 
 **Dependencies**: Only runs after CI workflow completes successfully
 
+**Branch Strategy**:
+- `main` branch → Production environment (us-west-2)
+- `dev` branch → Development environment (us-east-1)
+
 **Features**:
 - Smart change detection - only deploys modified services
 - Matrix strategy for parallel service deployment
@@ -190,12 +194,14 @@ Navigate to: **Settings → Secrets and variables → Actions → Variables tab*
 Create environments: **Settings → Environments**
 
 1. **production**
-   - Protection rules: Require approval
-   - Deployment branches: master only
+   - Protection rules: Require approval (recommended)
+   - Deployment branches: main only
+   - AWS Region: us-west-2
 
 2. **development**
    - Protection rules: None
-   - Deployment branches: master, dev
+   - Deployment branches: main, dev
+   - AWS Region: us-east-1
 
 ---
 
@@ -215,9 +221,9 @@ Create environments: **Settings → Environments**
 ## Best Practices
 
 ### 1. **Branch Strategy**
-- `main` → Production deployments
-- `dev` → Development deployments
-- Feature branches → PR checks only
+- `main` → Production deployments (us-west-2)
+- `dev` → Development deployments (us-east-1)
+- Feature branches → PR checks only (no deployment)
 
 ### 2. **Commit Messages**
 Use conventional commits for clarity:
