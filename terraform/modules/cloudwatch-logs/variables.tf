@@ -14,11 +14,7 @@ variable "retention_days" {
   default     = 7
 }
 
-variable "enable_analytics_queries" {
-  description = "Enable pre-built customer analytics queries"
-  type        = bool
-  default     = false
-}
+
 
 variable "tags" {
   description = "Tags to apply to resources"

@@ -2,10 +2,9 @@
 module "cloudwatch_logs" {
   source = "../cloudwatch-logs"
 
-  log_group_name           = "/ecs/sweetdream-${var.service_name}"
-  service_name             = var.service_name
-  retention_days           = var.log_retention_days
-  enable_analytics_queries = var.enable_analytics_queries
+  log_group_name = "/ecs/sweetdream-${var.service_name}"
+  service_name   = var.service_name
+  retention_days = var.log_retention_days
 
   tags = {
     Name        = "SweetDream ECS Logs - ${var.service_name}"

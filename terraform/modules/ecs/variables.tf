@@ -167,11 +167,7 @@ variable "log_retention_days" {
   default     = 7
 }
 
-variable "enable_analytics_queries" {
-  description = "Enable pre-built customer analytics queries"
-  type        = bool
-  default     = false
-}
+
 
 variable "environment" {
   description = "Environment name (dev, staging, production)"

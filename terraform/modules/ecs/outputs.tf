@@ -8,10 +8,7 @@ output "log_group_name" {
   value       = module.cloudwatch_logs.log_group_name
 }
 
-output "analytics_queries" {
-  description = "List of analytics query names"
-  value       = module.cloudwatch_logs.analytics_queries
-}
+
 
 output "task_definition_arn" {
   description = "ECS task definition ARN"

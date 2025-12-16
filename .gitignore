@@ -87,3 +87,7 @@ scripts/make-user-admin.ps1
 *.bak
 *.swp
 .env.backup
+
+# Personal files - do not commit
+test.txt
+thienphu_credentials.csv
