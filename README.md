@@ -1,48 +1,48 @@
-# 🛍️ SweetDream E-Commerce Platform
+# SweetDream E-Commerce Platform
 
 A production-ready, cloud-native e-commerce platform built with microservices architecture on AWS. Features automated CI/CD deployments, real-time analytics, comprehensive customer behavior tracking, and multi-environment support.
 
 **Key Highlights:**
-- 🚀 Fully automated CI/CD pipeline with GitHub Actions
-- 🏗️ Microservices architecture with 4 independent services
-- 📊 Real-time customer behavior analytics with S3 export
-- 🔄 Zero-downtime blue-green deployments
-- 🏛️ Infrastructure as Code with Terraform
-- 💰 Cost-optimized AWS infrastructure (~$120-220/month)
-- 🔐 Enterprise-grade security and monitoring
-- 🌍 Multi-environment support (dev/prod)
+- Fully automated CI/CD pipeline with GitHub Actions
+- Microservices architecture with 4 independent services
+- Real-time customer behavior analytics with S3 export
+- Zero-downtime blue-green deployments
+- Infrastructure as Code with Terraform
+- Cost-optimized AWS infrastructure (~$120-220/month)
+- Enterprise-grade security and monitoring
+- Multi-environment support (dev/prod)
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Project Overview](#-project-overview)
-- [Architecture](#-architecture)
-- [Features](#-features)
-- [Quick Start](#-quick-start)
-- [Multi-Environment Setup](#-multi-environment-setup)
-- [Project Structure](#-project-structure)
-- [API Documentation](#-api-documentation)
-- [Analytics System](#-analytics-system)
-- [Deployment Guide](#-deployment-guide)
-- [Development](#-development)
-- [Security](#-security)
-- [Monitoring & Cost](#-monitoring--cost)
-- [Troubleshooting](#-troubleshooting)
-- [Production Fixes](#-production-fixes)
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Multi-Environment Setup](#multi-environment-setup)
+- [Project Structure](#project-structure)
+- [API Documentation](#api-documentation)
+- [Analytics System](#analytics-system)
+- [Deployment Guide](#deployment-guide)
+- [Development](#development)
+- [Security](#security)
+- [Monitoring & Cost](#monitoring--cost)
+- [Troubleshooting](#troubleshooting)
+- [Production Fixes](#production-fixes)
 
-## 🎯 Project Overview
+## Project Overview
 
 ### Mission Statement
 SweetDream demonstrates modern cloud-native e-commerce architecture using AWS best practices, showcasing automated DevOps workflows, real-time analytics, and scalable microservices design.
 
 ### Success Metrics
-- ✅ 99.9% uptime with auto-scaling
-- ✅ Page load times under 2 seconds
-- ✅ Deployment times under 10 minutes
-- ✅ Automated daily analytics export
-- ✅ Zero-downtime deployments
-- ✅ Cost-optimized infrastructure
+- 99.9% uptime with auto-scaling
+- Page load times under 2 seconds
+- Deployment times under 10 minutes
+- Automated daily analytics export
+- Zero-downtime deployments
+- Cost-optimized infrastructure
 
-## 🏗️ Architecture
+## Architecture
 
 ### Microservices Design
 
@@ -140,37 +140,37 @@ AWS Account (Single Account, Multi-Region)
 | **Bastion Host** | Optional | Disabled |
 | **Backup Retention** | 7 days | 30 days |
 
-## ✨ Features
+## Features
 
-### 🛒 Customer Features
-- ✅ Product catalog with search and filtering
-- ✅ Shopping cart management
-- ✅ User registration and authentication
-- ✅ Order placement and tracking
-- ✅ Order history and status updates
-- ✅ Responsive design (mobile-friendly)
+### Customer Features
+- Product catalog with search and filtering
+- Shopping cart management
+- User registration and authentication
+- Order placement and tracking
+- Order history and status updates
+- Responsive design (mobile-friendly)
 
-### 👨‍💼 Admin Features
-- ✅ Order management dashboard
-- ✅ Order status updates
-- ✅ Customer analytics and insights
-- ✅ User role management
-- ✅ Real-time monitoring
+### Admin Features
+- Order management dashboard
+- Order status updates
+- Customer analytics and insights
+- User role management
+- Real-time monitoring
 
-### 🔧 Technical Features
-- ✅ **Microservices architecture** with service discovery
-- ✅ **Auto-scaling** based on CPU/memory usage
-- ✅ **Blue-green deployments** with zero downtime
-- ✅ **Automated CI/CD** with GitHub Actions
-- ✅ **Smart change detection** (only rebuild changed services)
-- ✅ **CloudWatch Insights** for log analysis
-- ✅ **Daily analytics export** to S3 with duplicate prevention
-- ✅ **Infrastructure as Code** with Terraform
-- ✅ **Container-based** deployment
-- ✅ **Health checks** and automatic recovery
-- ✅ **Secrets management** with AWS Secrets Manager
+### Technical Features
+- **Microservices architecture** with service discovery
+- **Auto-scaling** based on CPU/memory usage
+- **Blue-green deployments** with zero downtime
+- **Automated CI/CD** with GitHub Actions
+- **Smart change detection** (only rebuild changed services)
+- **CloudWatch Insights** for log analysis
+- **Daily analytics export** to S3 with duplicate prevention
+- **Infrastructure as Code** with Terraform
+- **Container-based** deployment
+- **Health checks** and automatic recovery
+- **Secrets management** with AWS Secrets Manager
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -262,14 +262,14 @@ terraform apply
 ```
 
 **GitHub Actions automatically handles:**
-- 🔍 Smart change detection (only rebuild changed services)
-- 🏗️ Parallel Docker image builds
-- 📦 ECR image pushing with proper tagging
-- 🚀 ECS service deployments with health checks
-- ✅ Infrastructure updates via Terraform
-- 📊 Analytics Lambda deployment
+- Smart change detection (only rebuild changed services)
+- Parallel Docker image builds
+- ECR image pushing with proper tagging
+- ECS service deployments with health checks
+- Infrastructure updates via Terraform
+- Analytics Lambda deployment
 
-## 🌍 Multi-Environment Setup
+## Multi-Environment Setup
 
 ### Environment Strategy
 
@@ -320,19 +320,19 @@ terraform apply
 ### Environment-Specific Configuration
 
 **Development Features:**
-- ✅ Relaxed security groups for debugging
-- ✅ Shorter log retention (cost optimization)
-- ✅ HTTP only (no SSL certificate required)
-- ✅ Optional bastion host for database access
-- ✅ Smaller instance sizes and scaling limits
+- Relaxed security groups for debugging
+- Shorter log retention (cost optimization)
+- HTTP only (no SSL certificate required)
+- Optional bastion host for database access
+- Smaller instance sizes and scaling limits
 
 **Production Features:**
-- 🔒 Strict security groups and network isolation
-- 🔒 Extended log retention for compliance
-- 🔒 HTTPS with ACM certificate
-- 🔒 Bastion host disabled by default
-- 🔒 Deployment confirmation prompts
-- 🔒 Enhanced monitoring and alerting
+- Strict security groups and network isolation
+- Extended log retention for compliance
+- HTTPS with ACM certificate
+- Bastion host disabled by default
+- Deployment confirmation prompts
+- Enhanced monitoring and alerting
 
 ### CI/CD Branch Strategy
 
@@ -347,7 +347,7 @@ on:
   pull_request: # → Run tests only, no deployment
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 sweetdream/
@@ -432,7 +432,7 @@ sweetdream/
 └── README.md                        # This file
 ```
 
-## 📡 API Documentation
+## API Documentation
 
 ### Backend Service (Port 3001)
 
@@ -531,7 +531,7 @@ curl -X POST http://localhost:3002/api/orders \
   }'
 ```
 
-## 📊 Analytics System
+## Analytics System
 
 ### Overview
 
@@ -589,7 +589,7 @@ The Lambda function automatically prevents duplicates:
 
 See `ANALYTICS_DEPLOYMENT_GUIDE.md` and `terraform/modules/cloudwatch-analytics/DUPLICATE_PREVENTION.md` for details.
 
-## 🚢 Deployment Guide
+## Deployment Guide
 
 ### Automated CI/CD Pipeline (GitHub Actions)
 
@@ -609,37 +609,37 @@ GitHub Actions UI      → Choose environment + force deploy option
 **1. Change Detection & Validation**
 ```bash
 # Smart change detection
-✅ Analyzes git diff to identify changed services
-✅ Skips unchanged services (faster deployments)
-✅ Validates CI success before deployment
-✅ Checks for hardcoded secrets in code
+- Analyzes git diff to identify changed services
+- Skips unchanged services (faster deployments)
+- Validates CI success before deployment
+- Checks for hardcoded secrets in code
 ```
 
 **2. Infrastructure Deployment**
 ```bash
 # Terraform operations (if infrastructure changed)
-✅ Terraform init, validate, plan
-✅ Apply infrastructure changes
-✅ Handle resource conflicts and cleanup
-✅ Update task definitions with new images
+- Terraform init, validate, plan
+- Apply infrastructure changes
+- Handle resource conflicts and cleanup
+- Update task definitions with new images
 ```
 
 **3. Service Deployment**
 ```bash
 # Parallel service builds (only changed services)
-✅ Build Docker images with optimized layers
-✅ Push to ECR with SHA and latest tags
-✅ Update ECS task definitions
-✅ Trigger rolling deployments with health checks
+- Build Docker images with optimized layers
+- Push to ECR with SHA and latest tags
+- Update ECS task definitions
+- Trigger rolling deployments with health checks
 ```
 
 **4. Verification & Monitoring**
 ```bash
 # Post-deployment validation
-✅ Wait for service stability
-✅ Verify target group health
-✅ Test Lambda analytics functions
-✅ Generate deployment summary
+- Wait for service stability
+- Verify target group health
+- Test Lambda analytics functions
+- Generate deployment summary
 ```
 
 #### Deployment Performance
@@ -741,11 +741,11 @@ aws elbv2 describe-target-health --target-group-arn <target-group-arn>
 ```
 
 #### GitHub Actions Dashboard
-- ✅ Real-time deployment status
-- ✅ Service-by-service progress
-- ✅ Infrastructure change summary
-- ✅ Cost impact estimation
-- ✅ Rollback instructions if needed
+- Real-time deployment status
+- Service-by-service progress
+- Infrastructure change summary
+- Cost impact estimation
+- Rollback instructions if needed
 
 ### Rollback Procedures
 
@@ -776,18 +776,18 @@ aws ecs update-service \
 ### Deployment Best Practices
 
 #### Pre-deployment Checklist
-- ✅ All tests passing in CI
-- ✅ Database migrations tested
-- ✅ Environment variables updated
-- ✅ Secrets rotated if needed
-- ✅ Monitoring alerts configured
+- All tests passing in CI
+- Database migrations tested
+- Environment variables updated
+- Secrets rotated if needed
+- Monitoring alerts configured
 
 #### Post-deployment Validation
-- ✅ All services healthy and stable
-- ✅ API endpoints responding correctly
-- ✅ Database connections working
-- ✅ Analytics export functioning
-- ✅ No error spikes in logs
+- All services healthy and stable
+- API endpoints responding correctly
+- Database connections working
+- Analytics export functioning
+- No error spikes in logs
 
 #### Emergency Procedures
 ```bash
@@ -803,7 +803,7 @@ terraform apply
 aws ssm start-session --target <bastion-instance-id>
 ```
 
-## 🛠️ Development
+## Development
 
 ### Database Migrations
 
@@ -874,36 +874,36 @@ npm run format
 npm run type-check
 ```
 
-## 🔐 Security
+## Security
 
 ### Network Security
-- ✅ VPC with public/private subnets
-- ✅ Security groups with least privilege
-- ✅ Private subnets for ECS and RDS
-- ✅ NAT Gateway for outbound traffic
-- ✅ HTTPS/TLS via ALB
+- VPC with public/private subnets
+- Security groups with least privilege
+- Private subnets for ECS and RDS
+- NAT Gateway for outbound traffic
+- HTTPS/TLS via ALB
 
 ### Application Security
-- ✅ JWT-based authentication
-- ✅ Password hashing with bcrypt
-- ✅ Role-based access control (RBAC)
-- ✅ Input validation and sanitization
-- ✅ SQL injection prevention (Prisma ORM)
+- JWT-based authentication
+- Password hashing with bcrypt
+- Role-based access control (RBAC)
+- Input validation and sanitization
+- SQL injection prevention (Prisma ORM)
 
 ### AWS Security
-- ✅ IAM roles with least privilege
-- ✅ Secrets Manager for credentials
-- ✅ Encrypted S3 buckets (AES-256)
-- ✅ Encrypted RDS storage
-- ✅ CloudWatch audit logs
+- IAM roles with least privilege
+- Secrets Manager for credentials
+- Encrypted S3 buckets (AES-256)
+- Encrypted RDS storage
+- CloudWatch audit logs
 
 ### Best Practices
-- ✅ No hardcoded credentials
-- ✅ Environment-based configuration
-- ✅ Regular security updates
-- ✅ Automated vulnerability scanning
+- No hardcoded credentials
+- Environment-based configuration
+- Regular security updates
+- Automated vulnerability scanning
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### View Logs
 
@@ -996,7 +996,7 @@ aws lambda invoke \
   response.json
 ```
 
-## 📈 Monitoring & Cost
+## Monitoring & Cost
 
 ### Comprehensive Monitoring Setup
 
@@ -1328,33 +1328,33 @@ This section documents critical infrastructure issues that were identified and r
 
 ### Current Production Status
 
-#### ✅ Successfully Deployed Components
+#### Successfully Deployed Components
 ```bash
 Infrastructure Status:
-├── ✅ VPC with public/private subnets (us-west-2)
-├── ✅ Security groups with proper isolation
-├── ✅ ALB with target groups and routing rules
-├── ✅ ECS cluster with all 4 services
-├── ✅ RDS PostgreSQL with Multi-AZ
-├── ✅ CodeDeploy applications and deployment groups
-├── ✅ Target groups associated with load balancer
-├── ✅ Service discovery and secrets management
-└── ✅ CloudWatch logging and monitoring
+├── VPC with public/private subnets (us-west-2)
+├── Security groups with proper isolation
+├── ALB with target groups and routing rules
+├── ECS cluster with all 4 services
+├── RDS PostgreSQL with Multi-AZ
+├── CodeDeploy applications and deployment groups
+├── Target groups associated with load balancer
+├── Service discovery and secrets management
+└── CloudWatch logging and monitoring
 ```
 
 #### 🏗️ Architecture Summary
 ```bash
 Service Deployment Strategy:
-├── Backend Service: ECS with service discovery (✅ Running - 2/2 tasks)
-├── Frontend: CodeDeploy Blue/Green (⏳ Awaiting initial deployment)
-├── User Service: CodeDeploy Blue/Green (⏳ Awaiting initial deployment)
-└── Order Service: CodeDeploy Blue/Green (⏳ Awaiting initial deployment)
+├── Backend Service: ECS with service discovery (Running - 2/2 tasks)
+├── Frontend: CodeDeploy Blue/Green (Awaiting initial deployment)
+├── User Service: CodeDeploy Blue/Green (Awaiting initial deployment)
+└── Order Service: CodeDeploy Blue/Green (Awaiting initial deployment)
 
 Database Configuration:
-├── ✅ RDS PostgreSQL with proper security group isolation
-├── ✅ Multi-AZ deployment for high availability
-├── ✅ Automated backups and maintenance windows
-└── ✅ Connection pooling and performance monitoring
+├── RDS PostgreSQL with proper security group isolation
+├── Multi-AZ deployment for high availability
+├── Automated backups and maintenance windows
+└── Connection pooling and performance monitoring
 ```
 
 #### 🌐 Load Balancer Configuration
@@ -1377,34 +1377,34 @@ Current Status:
 #### Infrastructure as Code Improvements
 ```bash
 Best Practices Implemented:
-├── ✅ Environment-specific variable files
-├── ✅ Dynamic resource naming with environment prefixes
-├── ✅ Proper dependency management between modules
-├── ✅ Region-agnostic infrastructure code
-├── ✅ Comprehensive output values for integration
-└── ✅ Modular design for reusability
+├── Environment-specific variable files
+├── Dynamic resource naming with environment prefixes
+├── Proper dependency management between modules
+├── Region-agnostic infrastructure code
+├── Comprehensive output values for integration
+└── Modular design for reusability
 ```
 
 #### Multi-Environment Strategy
 ```bash
 Separation Strategy:
-├── ✅ Separate AWS regions (dev: us-east-1, prod: us-west-2)
-├── ✅ Isolated Terraform state buckets
-├── ✅ Environment-specific CIDR blocks
-├── ✅ Different scaling and retention policies
-├── ✅ Separate ECR repositories with lifecycle policies
-└── ✅ Environment-aware CI/CD pipelines
+├── Separate AWS regions (dev: us-east-1, prod: us-west-2)
+├── Isolated Terraform state buckets
+├── Environment-specific CIDR blocks
+├── Different scaling and retention policies
+├── Separate ECR repositories with lifecycle policies
+└── Environment-aware CI/CD pipelines
 ```
 
 #### Security Enhancements
 ```bash
 Security Improvements:
-├── ✅ Least-privilege IAM roles per service
-├── ✅ Network isolation with security groups
-├── ✅ Secrets management with AWS Secrets Manager
-├── ✅ Encrypted storage for RDS and S3
-├── ✅ VPC Flow Logs for network monitoring
-└── ✅ Regular security group auditing
+├── Least-privilege IAM roles per service
+├── Network isolation with security groups
+├── Secrets management with AWS Secrets Manager
+├── Encrypted storage for RDS and S3
+├── VPC Flow Logs for network monitoring
+└── Regular security group auditing
 ```
 
 ### Future Enhancements
@@ -1412,29 +1412,29 @@ Security Improvements:
 #### Planned Improvements
 ```bash
 Infrastructure Roadmap:
-├── 🔄 Auto-scaling policies based on custom metrics
-├── 🔄 CloudFront distribution for global content delivery
-├── 🔄 WAF integration for application security
-├── 🔄 ElastiCache for session and data caching
-├── 🔄 Route 53 health checks and failover
-└── 🔄 Cross-region backup and disaster recovery
+├── Auto-scaling policies based on custom metrics
+├── CloudFront distribution for global content delivery
+├── WAF integration for application security
+├── ElastiCache for session and data caching
+├── Route 53 health checks and failover
+└── Cross-region backup and disaster recovery
 
 Monitoring Enhancements:
-├── 🔄 Custom CloudWatch metrics for business KPIs
-├── 🔄 Distributed tracing with AWS X-Ray
-├── 🔄 Synthetic monitoring for user journeys
-├── 🔄 Cost optimization recommendations automation
-└── 🔄 Predictive scaling based on historical patterns
+├── Custom CloudWatch metrics for business KPIs
+├── Distributed tracing with AWS X-Ray
+├── Synthetic monitoring for user journeys
+├── Cost optimization recommendations automation
+└── Predictive scaling based on historical patterns
 ```
 
 #### Operational Excellence
 ```bash
 DevOps Improvements:
-├── 🔄 Automated infrastructure testing with Terratest
-├── 🔄 Policy as Code with AWS Config rules
-├── 🔄 Automated security scanning in CI/CD
-├── 🔄 Infrastructure drift detection and remediation
-└── 🔄 Chaos engineering for resilience testing
+├── Automated infrastructure testing with Terratest
+├── Policy as Code with AWS Config rules
+├── Automated security scanning in CI/CD
+├── Infrastructure drift detection and remediation
+└── Chaos engineering for resilience testing
 ```
 
-**Built with ❤️ for learning cloud-native architecture**
+**Built with love for learning cloud-native architecture**

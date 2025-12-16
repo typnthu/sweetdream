@@ -2,7 +2,7 @@
 
 Node.js/Express backend API for the SweetDream e-commerce platform. Handles products, categories, orders, and customers in a microservices architecture.
 
-## 🏗️ Architecture
+## Architecture
 
 - **Runtime**: Node.js 20 + Express + TypeScript
 - **Database**: PostgreSQL 15 (AWS RDS)
@@ -11,7 +11,7 @@ Node.js/Express backend API for the SweetDream e-commerce platform. Handles prod
 - **Deployment**: AWS ECS Fargate
 - **Port**: 3001
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Local Development
 
@@ -50,7 +50,7 @@ npm run dev
 
 The API will be available at `http://localhost:3001`
 
-## 📊 API Endpoints
+## API Endpoints
 
 ### Products
 - `GET /api/products` - Get all products
@@ -86,7 +86,7 @@ The API will be available at `http://localhost:3001`
 ### Health Check
 - `GET /health` - Health check endpoint
 
-## 🏗️ AWS Deployment
+## AWS Deployment
 
 Deployment is automated via GitHub Actions. See the main [README.md](../README.md) for full deployment instructions.
 
@@ -112,7 +112,7 @@ Set in ECS task definition:
 - `PORT`: 3001
 - `NODE_ENV`: production
 
-## 🗄️ Database Schema
+## Database Schema
 
 The database includes the following tables:
 
@@ -123,7 +123,7 @@ The database includes the following tables:
 - **orders**: Order records
 - **order_items**: Individual items in orders
 
-## 🔧 Environment Variables
+## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -132,7 +132,7 @@ The database includes the following tables:
 | `DATABASE_URL` | PostgreSQL connection string | - |
 | `S3_BUCKET` | S3 bucket for product images | sweetdream-products |
 
-## 🔒 Security Features
+## Security Features
 
 - **Helmet.js**: Security headers
 - **CORS**: Cross-origin resource sharing
@@ -140,14 +140,14 @@ The database includes the following tables:
 - **SQL injection protection**: Prisma ORM
 - **Environment variables**: Sensitive data protection
 
-## 📈 Monitoring & Logging
+## Monitoring & Logging
 
 - **Health checks**: `/health` endpoint
 - **CloudWatch Logs**: Centralized logging
 - **ECS Service monitoring**: Built-in AWS monitoring
 - **Application Load Balancer**: Health checks and traffic distribution
 
-## 🚀 Production Considerations
+## Production Considerations
 
 1. **Database**: RDS PostgreSQL with automated backups
 2. **Scaling**: ECS auto-scaling configured (2-10 tasks)
@@ -155,7 +155,7 @@ The database includes the following tables:
 4. **Security**: Private subnets, security groups, IAM roles
 5. **Images**: Product images stored in S3
 
-## 🛠️ Development Commands
+## Development Commands
 
 ```bash
 # Install dependencies
@@ -181,11 +181,11 @@ docker build -t sweetdream-backend .
 docker run -p 3001:3001 sweetdream-backend
 ```
 
-## 📝 API Documentation
+## API Documentation
 
 See the main [README.md](../README.md#-api-documentation) for complete API documentation.
 
-## 🔗 Related Services
+## Related Services
 
 - **Frontend**: [fe/](../fe/)
 - **User Service**: [user-service/](../user-service/)

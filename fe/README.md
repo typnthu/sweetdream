@@ -2,7 +2,7 @@
 
 Next.js 15 frontend for the SweetDream e-commerce platform with App Router and TailwindCSS.
 
-## 🏗️ Architecture
+## Architecture
 
 - **Framework**: Next.js 15 (App Router)
 - **UI Library**: React 19
@@ -12,7 +12,7 @@ Next.js 15 frontend for the SweetDream e-commerce platform with App Router and T
 - **API**: Proxy routes to backend microservices
 - **Port**: 3000
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Local Development
 
@@ -49,7 +49,7 @@ npm run dev
 
 The app will be available at `http://localhost:3000`
 
-## 📱 Features
+## Features
 
 ### Customer Pages
 - `/` - Home page with featured products
@@ -68,7 +68,7 @@ The app will be available at `http://localhost:3000`
 - `/admin/categories` - Category management
 - `/admin/migrate` - Database tools
 
-## 🔌 API Integration
+## API Integration
 
 The frontend uses a proxy pattern to communicate with backend microservices:
 
@@ -101,7 +101,7 @@ const response = await fetch('/api/proxy/orders', {
 });
 ```
 
-## 🎨 Styling
+## Styling
 
 Uses TailwindCSS 4 with custom configuration:
 
@@ -110,7 +110,7 @@ Uses TailwindCSS 4 with custom configuration:
 - **Icons**: React Icons library
 - **Fonts**: System fonts
 
-## 🔧 Environment Variables
+## Environment Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -121,7 +121,7 @@ Uses TailwindCSS 4 with custom configuration:
 
 **Note**: Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser.
 
-## 🐳 Docker Build
+## Docker Build
 
 ```bash
 # Build image
@@ -134,7 +134,7 @@ docker run -p 3000:3000 \
   sweetdream-frontend
 ```
 
-## 🚀 AWS Deployment
+## AWS Deployment
 
 Deployment is automated via GitHub Actions. The frontend is deployed to ECS Fargate.
 
@@ -163,7 +163,7 @@ USER_SERVICE_URL=http://sweetdream-service-user.local:3001
 ORDER_SERVICE_URL=http://sweetdream-service-order.local:3002
 ```
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 fe/
@@ -191,7 +191,7 @@ fe/
 └── package.json
 ```
 
-## 🛠️ Development Commands
+## Development Commands
 
 ```bash
 # Install dependencies
@@ -210,7 +210,7 @@ npm start
 npm run lint
 ```
 
-## 🔗 Related Services
+## Related Services
 
 - **Backend**: [../be/](../be/)
 - **User Service**: [../user-service/](../user-service/)
