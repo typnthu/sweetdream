@@ -46,25 +46,25 @@ async function getOrCreateCategory(categoryName: string) {
         description: `Danh mục ${categoryName}`,
       },
     });
-    console.log(`✅ Created category: ${categoryName}`);
+    console.log(`Created category: ${categoryName}`);
   }
 
   return category;
 }
 
 async function seed() {
-  console.log('🌱 Starting database seed...\n');
+  console.log('Starting database seed...\n');
 
   try {
     // Clear existing data
-    console.log('🗑️  Clearing existing data...');
+    console.log('Clearing existing data...');
     await prisma.orderItem.deleteMany({});
     await prisma.order.deleteMany({});
     await prisma.customer.deleteMany({});
     await prisma.productSize.deleteMany({});
     await prisma.product.deleteMany({});
     await prisma.category.deleteMany({});
-    console.log('✅ Cleared existing data\n');
+    console.log('Cleared existing data\n');
 
     let successCount = 0;
     let errorCount = 0;
@@ -129,7 +129,7 @@ async function seed() {
 
     // Create default admin user
     console.log('\n👤 Creating default admin user...');
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const adminPassword = await bcrypt.hash('admin123', 10);
     
     const admin = await prisma.customer.upsert({

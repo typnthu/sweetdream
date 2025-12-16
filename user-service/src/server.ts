@@ -462,8 +462,8 @@ process.on('SIGTERM', async () => {
 });
 
 app.listen(port, () => {
-  console.log(`🔐 User Service running on port ${port}`);
-  console.log(`📊 Health check: http://localhost:${port}/health`);
+  console.log(`User Service running on port ${port}`);
+  console.log(`Health check: http://localhost:${port}/health`);
 });
 
 export default app;
