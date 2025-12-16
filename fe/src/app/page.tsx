@@ -31,8 +31,8 @@ export default function Home() {
   }, []);
 
   // Chọn sản phẩm hot / new dựa theo id
-  const hotProducts = products.slice(0, 4); // 4 sản phẩm đầu
-  const newProducts = products.slice(-4);   // 4 sản phẩm cuối
+  const hotProducts = products.slice(-4); // 4 sản phẩm cuối
+  const newProducts = products.slice(0,4);   // 4 sản phẩm đầu
 
   return (
     <div>
