@@ -2,11 +2,17 @@
 
 import { useState } from 'react';
 
+interface MigrateResult {
+  success: boolean;
+  error?: string;
+  message?: string;
+}
+
 export default function MigratePage() {
   const [migrateLoading, setMigrateLoading] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
-  const [migrateResult, setMigrateResult] = useState<any>(null);
-  const [seedResult, setSeedResult] = useState<any>(null);
+  const [migrateResult, setMigrateResult] = useState<MigrateResult | null>(null);
+  const [seedResult, setSeedResult] = useState<MigrateResult | null>(null);
 
   const runMigration = async () => {
     setMigrateLoading(true);
@@ -17,8 +23,8 @@ export default function MigratePage() {
       });
       const data = await response.json();
       setMigrateResult(data);
-    } catch (error: any) {
-      setMigrateResult({ success: false, error: error.message });
+    } catch (error) {
+      setMigrateResult({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     } finally {
       setMigrateLoading(false);
     }
@@ -33,8 +39,8 @@ export default function MigratePage() {
       });
       const data = await response.json();
       setSeedResult(data);
-    } catch (error: any) {
-      setSeedResult({ success: false, error: error.message });
+    } catch (error) {
+      setSeedResult({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     } finally {
       setSeedLoading(false);
     }

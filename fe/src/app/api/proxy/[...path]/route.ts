@@ -169,7 +169,7 @@ async function proxyRequest(
       
       // Log summary for large responses, full data for small ones
       const dataSize = JSON.stringify(data).length;
-      const logData: any = {
+      const logData: Record<string, unknown> = {
         status: response.status,
         responseTime: `${responseTime}ms`,
         dataSize,
@@ -238,11 +238,11 @@ async function proxyRequest(
 }
 
 // Helper function to sanitize sensitive data from logs
-function sanitizeLogData(data: any): any {
+function sanitizeLogData(data: unknown): unknown {
   if (!data || typeof data !== 'object') return data;
   
   const sensitiveKeys = ['password', 'token', 'secret', 'key', 'auth', 'credential'];
-  const sanitized = { ...data };
+  const sanitized = { ...data as Record<string, unknown> };
   
   for (const key in sanitized) {
     if (sensitiveKeys.some(sensitive => key.toLowerCase().includes(sensitive))) {

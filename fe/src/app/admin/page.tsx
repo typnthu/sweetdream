@@ -20,6 +20,12 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-2xl font-bold text-pink-500">Admin Dashboard</h1>
           </div>
+          <button
+            onClick={handleLogout}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
+          >
+            Đăng xuất
+          </button>
         </div>
         
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

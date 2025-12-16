@@ -61,11 +61,11 @@ variable "traffic_weights" {
   # ✅ Validation 1: mỗi weight từ 0–100
   validation {
     condition = (
-      var.traffic_weights.frontend.blue  >= 0 && var.traffic_weights.frontend.blue  <= 100 &&
+      var.traffic_weights.frontend.blue >= 0 && var.traffic_weights.frontend.blue <= 100 &&
       var.traffic_weights.frontend.green >= 0 && var.traffic_weights.frontend.green <= 100 &&
-      var.traffic_weights.user_service.blue  >= 0 && var.traffic_weights.user_service.blue  <= 100 &&
+      var.traffic_weights.user_service.blue >= 0 && var.traffic_weights.user_service.blue <= 100 &&
       var.traffic_weights.user_service.green >= 0 && var.traffic_weights.user_service.green <= 100 &&
-      var.traffic_weights.order_service.blue  >= 0 && var.traffic_weights.order_service.blue  <= 100 &&
+      var.traffic_weights.order_service.blue >= 0 && var.traffic_weights.order_service.blue <= 100 &&
       var.traffic_weights.order_service.green >= 0 && var.traffic_weights.order_service.green <= 100
     )
     error_message = "All blue/green weights must be between 0 and 100."
@@ -74,9 +74,9 @@ variable "traffic_weights" {
   # ✅ Validation 2: blue + green = 100
   validation {
     condition = (
-      var.traffic_weights.frontend.blue  + var.traffic_weights.frontend.green  == 100 &&
-      var.traffic_weights.user_service.blue  + var.traffic_weights.user_service.green  == 100 &&
-      var.traffic_weights.order_service.blue  + var.traffic_weights.order_service.green == 100
+      var.traffic_weights.frontend.blue + var.traffic_weights.frontend.green == 100 &&
+      var.traffic_weights.user_service.blue + var.traffic_weights.user_service.green == 100 &&
+      var.traffic_weights.order_service.blue + var.traffic_weights.order_service.green == 100
     )
     error_message = "Blue + Green weight must equal 100 for each service."
   }

@@ -270,18 +270,18 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type = "forward"
-    
+
     forward {
       target_group {
         arn    = aws_lb_target_group.frontend_blue.arn
         weight = var.traffic_weights.frontend.blue
       }
-      
+
       target_group {
         arn    = aws_lb_target_group.frontend_green.arn
         weight = var.traffic_weights.frontend.green
       }
-      
+
       stickiness {
         enabled  = false
         duration = 1
@@ -305,18 +305,18 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type = "forward"
-    
+
     forward {
       target_group {
         arn    = aws_lb_target_group.frontend_blue.arn
         weight = var.traffic_weights.frontend.blue
       }
-      
+
       target_group {
         arn    = aws_lb_target_group.frontend_green.arn
         weight = var.traffic_weights.frontend.green
       }
-      
+
       stickiness {
         enabled  = false
         duration = 1
@@ -426,18 +426,18 @@ resource "aws_lb_listener_rule" "user_service_rule_http" {
 
   action {
     type = "forward"
-    
+
     forward {
       target_group {
         arn    = aws_lb_target_group.user_service_blue.arn
         weight = var.traffic_weights.user_service.blue
       }
-      
+
       target_group {
         arn    = aws_lb_target_group.user_service_green.arn
         weight = var.traffic_weights.user_service.green
       }
-      
+
       stickiness {
         enabled  = false
         duration = 1
@@ -460,18 +460,18 @@ resource "aws_lb_listener_rule" "order_service_rule_http" {
 
   action {
     type = "forward"
-    
+
     forward {
       target_group {
         arn    = aws_lb_target_group.order_service_blue.arn
         weight = var.traffic_weights.order_service.blue
       }
-      
+
       target_group {
         arn    = aws_lb_target_group.order_service_green.arn
         weight = var.traffic_weights.order_service.green
       }
-      
+
       stickiness {
         enabled  = false
         duration = 1
@@ -494,18 +494,18 @@ resource "aws_lb_listener_rule" "user_service_rule_https" {
 
   action {
     type = "forward"
-    
+
     forward {
       target_group {
         arn    = aws_lb_target_group.user_service_blue.arn
         weight = var.traffic_weights.user_service.blue
       }
-      
+
       target_group {
         arn    = aws_lb_target_group.user_service_green.arn
         weight = var.traffic_weights.user_service.green
       }
-      
+
       stickiness {
         enabled  = false
         duration = 1
@@ -528,18 +528,18 @@ resource "aws_lb_listener_rule" "order_service_rule_https" {
 
   action {
     type = "forward"
-    
+
     forward {
       target_group {
         arn    = aws_lb_target_group.order_service_blue.arn
         weight = var.traffic_weights.order_service.blue
       }
-      
+
       target_group {
         arn    = aws_lb_target_group.order_service_green.arn
         weight = var.traffic_weights.order_service.green
       }
-      
+
       stickiness {
         enabled  = false
         duration = 1
