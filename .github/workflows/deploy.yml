@@ -155,8 +155,14 @@ jobs:
       - name: Terraform Plan
         run: |
           terraform plan \
+            -var="aws_region=${{ vars.AWS_REGION || 'us-east-1' }}" \
+            -var="environment=${{ vars.ENVIRONMENT || 'development' }}" \
+            -var="vpc_cidr=${{ vars.VPC_CIDR || '10.0.0.0/16' }}" \
+            -var="cluster_name=${{ vars.CLUSTER_NAME || 'sweetdream-cluster' }}" \
+            -var="db_name=${{ vars.DB_NAME || 'sweetdream' }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -var="s3_bucket_name=${{ vars.S3_BUCKET_NAME }}" \
             -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
             -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
             -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
@@ -303,8 +309,14 @@ jobs:
       - name: Terraform Apply (Update Task Definitions)
         run: |
           terraform apply -auto-approve \
+            -var="aws_region=${{ vars.AWS_REGION || 'us-east-1' }}" \
+            -var="environment=${{ vars.ENVIRONMENT || 'development' }}" \
+            -var="vpc_cidr=${{ vars.VPC_CIDR || '10.0.0.0/16' }}" \
+            -var="cluster_name=${{ vars.CLUSTER_NAME || 'sweetdream-cluster' }}" \
+            -var="db_name=${{ vars.DB_NAME || 'sweetdream' }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -var="s3_bucket_name=${{ vars.S3_BUCKET_NAME }}" \
             -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
             -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
             -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
