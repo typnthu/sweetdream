@@ -1,0 +1,52 @@
+{
+    "containerDefinitions": [
+        {
+            "name": "sweetdream-backend",
+            "image": "409964509537.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 3001,
+                    "hostPort": 3001,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "S3_BUCKET",
+                    "value": "sweetdream-logs-data-dev"
+                },
+                {
+                    "name": "DATABASE_URL",
+                    "value": "postgresql://sweetdream_user:sweetdream_password@sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com:5432/sweetdream_db"
+                },
+                {
+                    "name": "JWT_SECRET",
+                    "value": "your-super-secret-jwt-key-change-in-production"
+                },
+                {
+                    "name": "NODE_ENV",
+                    "value": "development"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/sweetdream-sweetdream-dev-service-backend",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "family": "sweetdream-dev-task-backend",
+    "taskRoleArn": "arn:aws:iam::409964509537:role/sweetdream-ecs-task-role",
+    "executionRoleArn": "arn:aws:iam::409964509537:role/sweetdream-ecs-execution-role",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "1024"
+}

@@ -1,0 +1,14 @@
+Outputs:
+
+alb_dns_name = "sweetdream-alb-916164689.us-east-1.elb.amazonaws.com"
+alb_url = "http://sweetdream-alb-916164689.us-east-1.elb.amazonaws.com"
+codedeploy_app_name = "sweetdream-dev-service-frontend-codedeploy"
+ecr_repositories = {
+  "backend" = "409964509537.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend"        
+  "frontend" = "409964509537.dkr.ecr.us-east-1.amazonaws.com/sweetdream-frontend"      
+  "order_service" = "409964509537.dkr.ecr.us-east-1.amazonaws.com/sweetdream-order-service"
+  "user_service" = "409964509537.dkr.ecr.us-east-1.amazonaws.com/sweetdream-user-service"
+}
+ecs_cluster_name = "sweetdream-dev-cluster"
+frontend_task_definition_arn = "arn:aws:ecs:us-east-1:409964509537:task-definition/sweetdream-dev-task-frontend:1"
+vpc_id = "vpc-001762b750cae0469"

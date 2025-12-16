@@ -233,8 +233,9 @@ sweetdream/
 │   └── terraform.tfvars             # Your values (gitignored)
 │
 ├── .github/workflows/               # CI/CD Pipelines
-│   ├── ci.yml                       # Continuous Integration
-│   └── deploy.yml                   # Deployment
+│   ├── ci-cd.yml                    # Unified CI/CD Pipeline
+│   └── README.md                    # Workflow documentation
+├── .github/ENVIRONMENTS_SETUP.md    # GitHub Environments setup guide
 │
 ├── scripts/                         # Utility Scripts
 │   ├── set-user-role.ps1           # Change user roles
@@ -404,61 +405,68 @@ See `ANALYTICS_DEPLOYMENT_GUIDE.md` and `terraform/modules/cloudwatch-analytics/
 
 ## 🚢 Deployment
 
+### Environments
+
+| Environment | Branch | Region | Approval |
+|-------------|--------|--------|----------|
+| Development | `dev` | us-east-1 | No |
+| Production | `main` | us-west-2 | Yes |
+
 ### Automated CI/CD (GitHub Actions)
 
+**Unified Pipeline (`ci-cd.yml`):**
+- CI và Deploy được gộp trong 1 workflow
+- CI phải pass trước khi Deploy chạy
+- Smart change detection - chỉ build/deploy services thay đổi
+
 **Triggers:**
-- Push to `main` branch → Production deployment
-- Push to `dev` branch → Development deployment
-- Pull requests → Run tests only
+- Push to `main` → CI → Deploy to Production (cần approval)
+- Push to `dev` → CI → Deploy to Development (tự động)
+- Pull requests → Chỉ chạy CI, không deploy
 
-**Pipeline Steps:**
-
-1. **Change Detection**
-   - Analyzes git diff
-   - Identifies changed services
-   - Skips unchanged services
-
-2. **Parallel Builds**
-   - Builds only changed services
-   - Pushes to ECR
-   - Tags with git SHA
-
-3. **ECS Deployment**
-   - Updates task definitions
-   - Triggers rolling updates
-   - Waits for health checks
-
-4. **Verification**
-   - Checks service stability
-   - Monitors CloudWatch logs
+**Pipeline Flow:**
+```
+Push → Change Detection → CI Jobs → Deploy Infrastructure → Deploy Services
+                              ↓
+                    (CI fail = Deploy không chạy)
+```
 
 **Deployment Time:**
 - Single service: ~5-8 minutes
 - All services: ~10-15 minutes
 
+### GitHub Environments Setup
+
+Xem hướng dẫn chi tiết: [.github/ENVIRONMENTS_SETUP.md](.github/ENVIRONMENTS_SETUP.md)
+
+**Required Secrets (per environment):**
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `DB_PASSWORD`
+
 ### Manual Deployment
 
 ```bash
-# Build and push specific service
-cd be
-docker build -t sweetdream-backend .
-docker tag sweetdream-backend:latest <account-id>.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest
-docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/sweetdream-backend:latest
+# Deploy to Development
+git checkout dev
+git push origin dev
 
-# Update ECS service
-aws ecs update-service \
-  --cluster sweetdream-cluster \
-  --service sweetdream-service-backend \
-  --force-new-deployment
+# Deploy to Production
+git checkout main
+git merge dev
+git push origin main
+# → Approve trong GitHub Actions
 ```
+
+### Manual Trigger
+
+1. Vào **Actions** → **CI/CD Pipeline**
+2. Click **Run workflow**
+3. Chọn environment và force deploy option
 
 ### Blue-Green Deployment
 
-The ALB uses weighted target groups for gradual rollouts:
-- Blue (current): 20% traffic
-- Green (new): 40% traffic
-- Canary testing before full rollout
-
+The ALB uses weighted target groups for gradual rollouts.
 Configure in `terraform/modules/alb/main.tf`.
 
 ## 🛠️ Development
@@ -600,9 +608,9 @@ aws ecs list-tasks --cluster sweetdream-cluster --service-name sweetdream-servic
 ### Database Access
 
 ```bash
-# Enable bastion host
+# Enable bastion host (optional, disabled by default)
 # Edit terraform/terraform.tfvars:
-enable_bastion = true
+enable_bastion = false
 
 # Apply changes
 cd terraform && terraform apply

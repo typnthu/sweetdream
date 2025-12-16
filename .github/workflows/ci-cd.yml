@@ -1,0 +1,516 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+        default: 'development'
+      force_deploy:
+        description: 'Force deploy all services (ignore change detection)'
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '20'
+  TERRAFORM_VERSION: '1.6.0'
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+# ============================================================================
+# JOBS
+# ============================================================================
+jobs:
+  # ==========================================================================
+  # CHANGE DETECTION
+  # ==========================================================================
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      order-service: ${{ steps.filter.outputs.order-service }}
+      user-service: ${{ steps.filter.outputs.user-service }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+      environment: ${{ steps.env.outputs.environment }}
+      aws_region: ${{ steps.env.outputs.aws_region }}
+      ecs_cluster: ${{ steps.env.outputs.ecs_cluster }}
+      terraform_dir: ${{ steps.env.outputs.terraform_dir }}
+      image_tag: ${{ steps.env.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect file changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'be/**'
+            frontend:
+              - 'fe/**'
+            order-service:
+              - 'order-service/**'
+            user-service:
+              - 'user-service/**'
+            terraform:
+              - 'terraform/**'
+
+      - name: Determine environment
+        id: env
+        run: |
+          # Manual trigger takes precedence
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          # Branch-based environment selection
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENV="production"
+          else
+            ENV="development"
+          fi
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          
+          # Set environment-specific variables
+          if [ "$ENV" = "production" ]; then
+            echo "aws_region=us-west-2" >> $GITHUB_OUTPUT
+            echo "ecs_cluster=sweetdream-prod-cluster" >> $GITHUB_OUTPUT
+            echo "terraform_dir=terraform/environments/prod" >> $GITHUB_OUTPUT
+            echo "image_tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
+            echo "ecs_cluster=sweetdream-dev-cluster" >> $GITHUB_OUTPUT
+            echo "terraform_dir=terraform/environments/dev" >> $GITHUB_OUTPUT
+            echo "image_tag=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Summary
+        run: |
+          echo "## 🔍 Change Detection" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Changed |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ steps.filter.outputs.backend }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ steps.filter.outputs.frontend }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Service | ${{ steps.filter.outputs.order-service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| User Service | ${{ steps.filter.outputs.user-service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform | ${{ steps.filter.outputs.terraform }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Environment:** ${{ steps.env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AWS Region:** ${{ steps.env.outputs.aws_region }}" >> $GITHUB_STEP_SUMMARY
+
+
+  # ==========================================================================
+  # CI JOBS - Build, Test, Lint
+  # ==========================================================================
+  
+  ci-backend:
+    name: CI - Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event.inputs.force_deploy == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: sweetdream_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: be/package-lock.json
+      
+      - name: Install & Build
+        working-directory: be
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
+      
+      - name: Lint
+        working-directory: be
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Run Tests
+        working-directory: be
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/sweetdream_test
+        run: |
+          npx prisma migrate deploy
+          npm test
+      
+      - name: Security Audit
+        working-directory: be
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+  ci-frontend:
+    name: CI - Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event.inputs.force_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: fe/package-lock.json
+      
+      - name: Install & Build
+        working-directory: fe
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+        run: |
+          npm ci
+          npm run build
+      
+      - name: Lint
+        working-directory: fe
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Type Check
+        working-directory: fe
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+  ci-order-service:
+    name: CI - Order Service
+    needs: changes
+    if: needs.changes.outputs.order-service == 'true' || github.event.inputs.force_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: order-service/package-lock.json
+      
+      - name: Install & Build
+        working-directory: order-service
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
+
+  ci-user-service:
+    name: CI - User Service
+    needs: changes
+    if: needs.changes.outputs.user-service == 'true' || github.event.inputs.force_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: user-service/package-lock.json
+      
+      - name: Install & Build
+        working-directory: user-service
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
+
+  ci-terraform:
+    name: CI - Terraform
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true' || github.event.inputs.force_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Format Check
+        working-directory: ${{ needs.changes.outputs.terraform_dir }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+      
+      - name: Validate Dev
+        working-directory: terraform/environments/dev
+        run: |
+          terraform init -backend=false
+          terraform validate
+      
+      - name: Validate Prod
+        working-directory: terraform/environments/prod
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+
+  # ==========================================================================
+  # DEPLOY JOBS - Only run after CI passes
+  # ==========================================================================
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    needs: [changes, ci-backend, ci-frontend, ci-order-service, ci-user-service, ci-terraform]
+    # Only deploy on push to main/dev, not on PRs
+    if: |
+      always() &&
+      github.event_name != 'pull_request' &&
+      (needs.changes.outputs.terraform == 'true' || github.event.inputs.force_deploy == 'true') &&
+      (needs.ci-backend.result == 'success' || needs.ci-backend.result == 'skipped') &&
+      (needs.ci-frontend.result == 'success' || needs.ci-frontend.result == 'skipped') &&
+      (needs.ci-order-service.result == 'success' || needs.ci-order-service.result == 'skipped') &&
+      (needs.ci-user-service.result == 'success' || needs.ci-user-service.result == 'skipped') &&
+      (needs.ci-terraform.result == 'success' || needs.ci-terraform.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ needs.changes.outputs.environment }}
+    defaults:
+      run:
+        working-directory: ${{ needs.changes.outputs.terraform_dir }}
+    outputs:
+      deployed: ${{ steps.apply.outputs.deployed }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ needs.changes.outputs.aws_region }}
+      
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
+            -out=tfplan
+      
+      - name: Terraform Apply
+        id: apply
+        run: |
+          terraform apply -auto-approve tfplan
+          echo "deployed=true" >> $GITHUB_OUTPUT
+          echo "✅ Infrastructure deployed to ${{ needs.changes.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+
+
+  deploy-services:
+    name: Deploy Services
+    needs: [changes, ci-backend, ci-frontend, ci-order-service, ci-user-service, ci-terraform, deploy-infrastructure]
+    # Only deploy on push to main/dev, not on PRs
+    if: |
+      always() &&
+      github.event_name != 'pull_request' &&
+      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
+      (needs.ci-backend.result == 'success' || needs.ci-backend.result == 'skipped') &&
+      (needs.ci-frontend.result == 'success' || needs.ci-frontend.result == 'skipped') &&
+      (needs.ci-order-service.result == 'success' || needs.ci-order-service.result == 'skipped') &&
+      (needs.ci-user-service.result == 'success' || needs.ci-user-service.result == 'skipped') &&
+      (needs.ci-terraform.result == 'success' || needs.ci-terraform.result == 'skipped') &&
+      (needs.changes.outputs.backend == 'true' || 
+       needs.changes.outputs.frontend == 'true' || 
+       needs.changes.outputs.order-service == 'true' || 
+       needs.changes.outputs.user-service == 'true' ||
+       github.event.inputs.force_deploy == 'true')
+    runs-on: ubuntu-latest
+    environment: ${{ needs.changes.outputs.environment }}
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            path: be
+            port: 3001
+          - name: frontend
+            path: fe
+            port: 3000
+          - name: order-service
+            path: order-service
+            port: 3002
+          - name: user-service
+            path: user-service
+            port: 3003
+      fail-fast: false
+    steps:
+      - name: Check if deployment needed
+        id: check
+        run: |
+          SERVICE="${{ matrix.service.name }}"
+          CHANGED="false"
+          
+          case $SERVICE in
+            backend) CHANGED="${{ needs.changes.outputs.backend }}" ;;
+            frontend) CHANGED="${{ needs.changes.outputs.frontend }}" ;;
+            order-service) CHANGED="${{ needs.changes.outputs.order-service }}" ;;
+            user-service) CHANGED="${{ needs.changes.outputs.user-service }}" ;;
+          esac
+          
+          if [[ "$CHANGED" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "🚀 Will deploy $SERVICE" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Skipping $SERVICE (no changes)" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.deploy == 'true'
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check.outputs.deploy == 'true'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ needs.changes.outputs.aws_region }}
+      
+      - uses: aws-actions/amazon-ecr-login@v2
+        if: steps.check.outputs.deploy == 'true'
+        id: ecr
+      
+      - name: Build & Push Docker Image
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
+        run: |
+          IMAGE_NAME=$ECR_REGISTRY/sweetdream-${{ matrix.service.name }}
+          
+          docker build \
+            -t $IMAGE_NAME:$IMAGE_TAG \
+            -t $IMAGE_NAME:${{ github.sha }} \
+            ./${{ matrix.service.path }}
+          
+          docker push $IMAGE_NAME:$IMAGE_TAG
+          docker push $IMAGE_NAME:${{ github.sha }}
+          
+          echo "✅ Pushed ${{ matrix.service.name }}:$IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Deploy to ECS
+        if: steps.check.outputs.deploy == 'true'
+        run: |
+          SERVICE_NAME="sweetdream-${{ needs.changes.outputs.environment == 'production' && 'prod' || 'dev' }}-service-${{ matrix.service.name }}"
+          
+          echo "🚀 Deploying $SERVICE_NAME..."
+          
+          aws ecs update-service \
+            --cluster ${{ needs.changes.outputs.ecs_cluster }} \
+            --service $SERVICE_NAME \
+            --force-new-deployment \
+            --no-cli-pager
+          
+          echo "✅ $SERVICE_NAME deployment initiated" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Wait for deployment
+        if: steps.check.outputs.deploy == 'true'
+        run: |
+          SERVICE_NAME="sweetdream-${{ needs.changes.outputs.environment == 'production' && 'prod' || 'dev' }}-service-${{ matrix.service.name }}"
+          
+          echo "⏳ Waiting for $SERVICE_NAME to stabilize..."
+          
+          aws ecs wait services-stable \
+            --cluster ${{ needs.changes.outputs.ecs_cluster }} \
+            --services $SERVICE_NAME \
+            --no-cli-pager
+          
+          echo "✅ $SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
+
+
+  # ==========================================================================
+  # SUMMARY
+  # ==========================================================================
+
+  summary:
+    name: Pipeline Summary
+    needs: [changes, ci-backend, ci-frontend, ci-order-service, ci-user-service, ci-terraform, deploy-infrastructure, deploy-services]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get ALB URL
+        id: alb
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ needs.changes.outputs.aws_region }}
+        run: |
+          if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+            ALB_URL=$(aws elbv2 describe-load-balancers \
+              --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' \
+              --output text 2>/dev/null || echo "N/A")
+            echo "url=$ALB_URL" >> $GITHUB_OUTPUT
+          else
+            echo "url=N/A" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Summary
+        run: |
+          echo "## 🚀 CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📊 CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Changed | CI Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|-----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ needs.changes.outputs.backend }} | ${{ needs.ci-backend.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ needs.changes.outputs.frontend }} | ${{ needs.ci-frontend.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Order Service | ${{ needs.changes.outputs.order-service }} | ${{ needs.ci-order-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| User Service | ${{ needs.changes.outputs.user-service }} | ${{ needs.ci-user-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform | ${{ needs.changes.outputs.terraform }} | ${{ needs.ci-terraform.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "### 🚢 Deployment Results" >> $GITHUB_STEP_SUMMARY
+            echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Infrastructure | ${{ needs.deploy-infrastructure.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Services | ${{ needs.deploy-services.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            echo "### 🌐 Access" >> $GITHUB_STEP_SUMMARY
+            echo "- **Environment:** ${{ needs.changes.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Region:** ${{ needs.changes.outputs.aws_region }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Application URL:** http://${{ steps.alb.outputs.url || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ℹ️ Pull Request" >> $GITHUB_STEP_SUMMARY
+            echo "This is a PR - deployment was skipped." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,77 @@
+﻿{
+    "executionRoleArn":  "arn:aws:iam::409964509537:role/sweetdream-ecs-execution-role",
+    "networkMode":  "awsvpc",
+    "cpu":  "256",
+    "requiresCompatibilities":  [
+                                    "FARGATE"
+                                ],
+    "containerDefinitions":  [
+                                 {
+                                     "name":  "sweetdream-order-service",
+                                     "image":  "409964509537.dkr.ecr.us-east-1.amazonaws.com/sweetdream-order-service:latest",
+                                     "cpu":  0,
+                                     "portMappings":  [
+                                                          {
+                                                              "containerPort":  3002,
+                                                              "hostPort":  3002,
+                                                              "protocol":  "tcp"
+                                                          }
+                                                      ],
+                                     "essential":  true,
+                                     "environment":  [
+                                                         {
+                                                             "name":  "S3_BUCKET",
+                                                             "value":  ""
+                                                         },
+                                                         {
+                                                             "name":  "DATABASE_URL",
+                                                             "value":  "postgresql://postgres:temporary_password_123@sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com/sweetdream"
+                                                         },
+                                                         {
+                                                             "name":  "USER_SERVICE_URL",
+                                                             "value":  "http://user-service.sweetdream.local:3003"
+                                                         },
+                                                         {
+                                                             "name":  "DB_USER",
+                                                             "value":  "postgres"
+                                                         },
+                                                         {
+                                                             "name":  "DB_NAME",
+                                                             "value":  "sweetdream"
+                                                         },
+                                                         {
+                                                             "name":  "DB_HOST",
+                                                             "value":  "sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com"
+                                                         },
+                                                         {
+                                                             "name":  "DB_PASSWORD",
+                                                             "value":  "temporary_password_123"
+                                                         },
+                                                         {
+                                                             "name":  "NEXT_PUBLIC_API_URL",
+                                                             "value":  "/api/proxy"
+                                                         }
+                                                     ],
+                                     "mountPoints":  [
+
+                                                     ],
+                                     "volumesFrom":  [
+
+                                                     ],
+                                     "logConfiguration":  {
+                                                              "logDriver":  "awslogs",
+                                                              "options":  {
+                                                                              "awslogs-group":  "/ecs/sweetdream-sweetdream-dev-service-order-service",
+                                                                              "awslogs-region":  "us-east-1",
+                                                                              "awslogs-stream-prefix":  "ecs"
+                                                                          }
+                                                          },
+                                     "systemControls":  [
+
+                                                        ]
+                                 }
+                             ],
+    "family":  "sweetdream-dev-task-order-service",
+    "taskRoleArn":  "arn:aws:iam::409964509537:role/sweetdream-ecs-task-role",
+    "memory":  "512"
+}
