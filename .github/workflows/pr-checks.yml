@@ -24,7 +24,16 @@ jobs:
       
       - name: Check for secrets
         run: |
-          if grep -r "aws_access_key_id\|aws_secret_access_key" --exclude-dir=.git --exclude-dir=node_modules .; then
+          # Define patterns to avoid false positives in this file
+          AWS_KEY_PATTERN="aws_access_key_id"
+          AWS_SECRET_PATTERN="aws_secret_access_key"
+          
+          # Exclude this workflow file from the search
+          if grep -r "$AWS_KEY_PATTERN\|$AWS_SECRET_PATTERN" \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude="pr-checks.yml" \
+            .; then
             echo "Found potential secrets in code!"
             exit 1
           fi
