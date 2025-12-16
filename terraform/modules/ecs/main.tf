@@ -2,12 +2,12 @@
 module "cloudwatch_logs" {
   source = "../cloudwatch-logs"
 
-  log_group_name = "/ecs/sweetdream-${var.service_name}"
+  log_group_name = "/ecs/${var.container_name}"
   service_name   = var.service_name
   retention_days = var.log_retention_days
 
   tags = {
-    Name        = "SweetDream ECS Logs - ${var.service_name}"
+    Name        = "SweetDream ECS Logs - ${var.container_name}"
     Service     = var.service_name
     Environment = var.environment
   }
@@ -94,7 +94,7 @@ resource "aws_ecs_task_definition" "app" {
       logDriver = "awslogs"
       options = {
         "awslogs-group"         = module.cloudwatch_logs.log_group_name
-        "awslogs-region"        = "us-east-1"
+        "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
       }
     }

@@ -74,7 +74,7 @@ async function seed() {
         const productPath = path.join(__dirname, file);
 
         if (!fs.existsSync(productPath)) {
-          console.warn(`⚠️  Product file not found: ${productPath}`);
+          console.warn(`Product file not found: ${productPath}`);
           errorCount++;
           continue;
         }
@@ -111,20 +111,20 @@ async function seed() {
         });
 
         console.log(
-          `✅ Created: ${product.name} (${product.category.name}) with ${product.sizes.length} sizes`
+          `Created: ${product.name} (${product.category.name}) with ${product.sizes.length} sizes`
         );
         console.log(`   Image: ${product.img}`);
         successCount++;
       } catch (error: any) {
-        console.error(`❌ Error processing product ${id}:`, error.message);
+        console.error(`Error processing product ${id}:`, error.message);
         errorCount++;
       }
     }
 
     console.log('\n' + '='.repeat(60));
-    console.log('📊 Seed Summary:');
-    console.log(`✅ Success: ${successCount} products`);
-    console.log(`❌ Errors: ${errorCount} products`);
+    console.log('Seed Summary:');
+    console.log(`Success: ${successCount} products`);
+    console.log(`Errors: ${errorCount} products`);
     console.log('='.repeat(60));
 
     // Create default admin user
@@ -142,7 +142,7 @@ async function seed() {
         role: 'ADMIN'
       }
     });
-    console.log(`✅ Admin user created: ${admin.email}`);
+    console.log(`Admin user created: ${admin.email}`);
 
     // Display categories
     const categories = await prisma.category.findMany({
@@ -159,7 +159,7 @@ async function seed() {
     });
 
   } catch (error) {
-    console.error('❌ Seed failed:', error);
+    console.error('Seed failed:', error);
     throw error;
   } finally {
     await prisma.$disconnect();
@@ -168,11 +168,11 @@ async function seed() {
 
 seed()
   .then(() => {
-    console.log('\n✅ Database seeded successfully!');
-    console.log('📸 All products now have S3 image URLs');
+    console.log('\nDatabase seeded successfully!');
+    console.log('All products now have S3 image URLs');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('\n❌ Seed failed:', error);
+    console.error('\nSeed failed:', error);
     process.exit(1);
   });

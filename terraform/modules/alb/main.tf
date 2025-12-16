@@ -152,6 +152,116 @@ resource "aws_lb_target_group" "frontend_green" {
   }
 }
 
+# User Service Target Groups (Blue/Green)
+resource "aws_lb_target_group" "user_service_blue" {
+  name        = "sweetdream-user-svc-blue-tg"
+  port        = 3003
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200-299"
+  }
+
+  deregistration_delay = 30
+
+  tags = {
+    Name = "SweetDream User Service Blue Target Group"
+  }
+
+  depends_on = [aws_lb.main]
+}
+
+resource "aws_lb_target_group" "user_service_green" {
+  name        = "sweetdream-user-svc-green-tg"
+  port        = 3003
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200-299"
+  }
+
+  deregistration_delay = 30
+
+  tags = {
+    Name = "SweetDream User Service Green Target Group"
+  }
+
+  depends_on = [aws_lb.main]
+}
+
+# Order Service Target Groups (Blue/Green)
+resource "aws_lb_target_group" "order_service_blue" {
+  name        = "sweetdream-order-svc-blue-tg"
+  port        = 3002
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200-299"
+  }
+
+  deregistration_delay = 30
+
+  tags = {
+    Name = "SweetDream Order Service Blue Target Group"
+  }
+
+  depends_on = [aws_lb.main]
+}
+
+resource "aws_lb_target_group" "order_service_green" {
+  name        = "sweetdream-order-svc-green-tg"
+  port        = 3002
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200-299"
+  }
+
+  deregistration_delay = 30
+
+  tags = {
+    Name = "SweetDream Order Service Green Target Group"
+  }
+
+  depends_on = [aws_lb.main]
+}
+
 # HTTP Listener - CodeDeploy manages Blue/Green
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
@@ -159,8 +269,24 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend_blue.arn
+    type = "forward"
+    
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.frontend_blue.arn
+        weight = var.traffic_weights.frontend.blue
+      }
+      
+      target_group {
+        arn    = aws_lb_target_group.frontend_green.arn
+        weight = var.traffic_weights.frontend.green
+      }
+      
+      stickiness {
+        enabled  = false
+        duration = 1
+      }
+    }
   }
 
   depends_on = [
@@ -224,23 +350,92 @@ resource "aws_security_group_rule" "ecs_from_alb" {
   description              = "Allow ALB to access ECS services"
 }
 
-# Backend API routing rule for HTTP - Blue/Green weighted
-resource "aws_lb_listener_rule" "backend_rule_http" {
+# Backend API routing rule for HTTP - Disabled in production (uses service discovery)
+# resource "aws_lb_listener_rule" "backend_rule_http" {
+#   count        = var.environment == "production" ? 1 : 0
+#   listener_arn = aws_lb_listener.http.arn
+#   priority     = 10
+#
+#   action {
+#     type = "forward"
+#     
+#     forward {
+#       target_group {
+#         arn    = aws_lb_target_group.backend_blue.arn
+#         weight = var.traffic_weights.frontend.blue  # Use frontend weights for backend API
+#       }
+#       
+#       target_group {
+#         arn    = aws_lb_target_group.backend_green.arn
+#         weight = var.traffic_weights.frontend.green
+#       }
+#       
+#       stickiness {
+#         enabled  = false
+#         duration = 1
+#       }
+#     }
+#   }
+#
+#   condition {
+#     path_pattern {
+#       values = ["/api/*"]
+#     }
+#   }
+# }
+
+# Backend API routing rule for HTTPS - Disabled in production (uses service discovery)
+# resource "aws_lb_listener_rule" "backend_rule_https" {
+#   count        = var.acm_certificate_arn != null && var.environment == "production" ? 1 : 0
+#   listener_arn = aws_lb_listener.https[0].arn
+#   priority     = 10
+#
+#   action {
+#     type = "forward"
+#     
+#     forward {
+#       target_group {
+#         arn    = aws_lb_target_group.backend_blue.arn
+#         weight = var.traffic_weights.frontend.blue  # Use frontend weights for backend API
+#       }
+#       
+#       target_group {
+#         arn    = aws_lb_target_group.green.arn
+#         weight = var.traffic_weights.frontend.green
+#       }
+#       
+#       stickiness {
+#         enabled  = false
+#         duration = 1
+#       }
+#     }
+#   }
+#
+#   condition {
+#     path_pattern {
+#       values = ["/api/*"]
+#     }
+#   }
+# }
+
+# User Service API routing rule for HTTP - Blue/Green weighted (Production only)
+resource "aws_lb_listener_rule" "user_service_rule_http" {
+  count        = var.environment == "production" ? 1 : 0
   listener_arn = aws_lb_listener.http.arn
-  priority     = 10
+  priority     = 20
 
   action {
     type = "forward"
     
     forward {
       target_group {
-        arn    = aws_lb_target_group.backend_blue.arn
-        weight = var.traffic_weights.frontend.blue  # Use frontend weights for backend API
+        arn    = aws_lb_target_group.user_service_blue.arn
+        weight = var.traffic_weights.user_service.blue
       }
       
       target_group {
-        arn    = aws_lb_target_group.backend_green.arn
-        weight = var.traffic_weights.frontend.green
+        arn    = aws_lb_target_group.user_service_green.arn
+        weight = var.traffic_weights.user_service.green
       }
       
       stickiness {
@@ -252,29 +447,63 @@ resource "aws_lb_listener_rule" "backend_rule_http" {
 
   condition {
     path_pattern {
-      values = ["/api/*"]
+      values = ["/api/users/*", "/api/auth/*", "/api/customers/*", "/api/customers"]
     }
   }
 }
 
-# Backend API routing rule for HTTPS (if certificate exists) - Blue/Green weighted
-resource "aws_lb_listener_rule" "backend_rule_https" {
-  count        = var.acm_certificate_arn != null ? 1 : 0
+# Order Service API routing rule for HTTP - Blue/Green weighted (Production only)
+resource "aws_lb_listener_rule" "order_service_rule_http" {
+  count        = var.environment == "production" ? 1 : 0
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 30
+
+  action {
+    type = "forward"
+    
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.order_service_blue.arn
+        weight = var.traffic_weights.order_service.blue
+      }
+      
+      target_group {
+        arn    = aws_lb_target_group.order_service_green.arn
+        weight = var.traffic_weights.order_service.green
+      }
+      
+      stickiness {
+        enabled  = false
+        duration = 1
+      }
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/orders/*", "/api/orders"]
+    }
+  }
+}
+
+# User Service API routing rule for HTTPS (if certificate exists) - Blue/Green weighted (Production only)
+resource "aws_lb_listener_rule" "user_service_rule_https" {
+  count        = var.acm_certificate_arn != null && var.environment == "production" ? 1 : 0
   listener_arn = aws_lb_listener.https[0].arn
-  priority     = 10
+  priority     = 20
 
   action {
     type = "forward"
     
     forward {
       target_group {
-        arn    = aws_lb_target_group.backend_blue.arn
-        weight = var.traffic_weights.frontend.blue  # Use frontend weights for backend API
+        arn    = aws_lb_target_group.user_service_blue.arn
+        weight = var.traffic_weights.user_service.blue
       }
       
       target_group {
-        arn    = aws_lb_target_group.backend_green.arn
-        weight = var.traffic_weights.frontend.green
+        arn    = aws_lb_target_group.user_service_green.arn
+        weight = var.traffic_weights.user_service.green
       }
       
       stickiness {
@@ -286,8 +515,41 @@ resource "aws_lb_listener_rule" "backend_rule_https" {
 
   condition {
     path_pattern {
-      values = ["/api/*"]
+      values = ["/api/users/*", "/api/auth/*", "/api/customers/*", "/api/customers"]
     }
   }
 }
 
+# Order Service API routing rule for HTTPS (if certificate exists) - Blue/Green weighted (Production only)
+resource "aws_lb_listener_rule" "order_service_rule_https" {
+  count        = var.acm_certificate_arn != null && var.environment == "production" ? 1 : 0
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 30
+
+  action {
+    type = "forward"
+    
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.order_service_blue.arn
+        weight = var.traffic_weights.order_service.blue
+      }
+      
+      target_group {
+        arn    = aws_lb_target_group.order_service_green.arn
+        weight = var.traffic_weights.order_service.green
+      }
+      
+      stickiness {
+        enabled  = false
+        duration = 1
+      }
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/orders/*", "/api/orders"]
+    }
+  }
+}

@@ -21,7 +21,7 @@ foreach ($repo in $repositories) {
         $exists = aws ecr describe-repositories --repository-names $repo 2>$null
         
         if ($exists) {
-            Write-Host "  ✓ Repository already exists" -ForegroundColor Green
+            Write-Host "  Repository already exists" -ForegroundColor Green
         }
     } catch {
         # Create repository
@@ -31,7 +31,7 @@ foreach ($repo in $repositories) {
             --encryption-configuration encryptionType=AES256 `
             --tags Key=Project,Value=SweetDream Key=ManagedBy,Value=Script
         
-        Write-Host "  ✓ Repository created" -ForegroundColor Green
+        Write-Host "  Repository created" -ForegroundColor Green
         
         # Set lifecycle policy (keep last 10 images)
         $lifecyclePolicy = @{
@@ -55,15 +55,15 @@ foreach ($repo in $repositories) {
             --repository-name $repo `
             --lifecycle-policy-text $lifecyclePolicy
         
-        Write-Host "  ✓ Lifecycle policy set" -ForegroundColor Green
+        Write-Host "  Lifecycle policy set" -ForegroundColor Green
     }
     
     Write-Host ""
 }
 
-Write-Host "═══════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "✓ ECR Setup Complete!" -ForegroundColor Green
-Write-Host "═══════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
+Write-Host "ECR Setup Complete!" -ForegroundColor Green
+Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Repository URLs:" -ForegroundColor Yellow
 

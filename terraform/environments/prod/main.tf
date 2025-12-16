@@ -1,4 +1,4 @@
-t# Production Environment - US-East-1
+# Production Environment - US-West-2
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -41,7 +41,8 @@ module "vpc" {
 }
 
 module "iam" {
-  source = "../../modules/iam"
+  source      = "../../modules/iam"
+  environment = var.environment
 }
 
 module "s3" {
@@ -61,6 +62,22 @@ module "alb" {
   public_subnet_ids     = module.vpc.public_subnets
   ecs_security_group_id = module.vpc.ecs_security_group_id
   acm_certificate_arn   = var.acm_certificate_arn
+  environment           = var.environment
+
+  traffic_weights = {
+    frontend = {
+      blue  = 100
+      green = 0
+    }
+    user_service = {
+      blue  = 100
+      green = 0
+    }
+    order_service = {
+      blue  = 100
+      green = 0
+    }
+  }
 }
 
 module "secrets_manager" {
@@ -78,7 +95,8 @@ module "rds" {
   db_password           = var.db_password
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.rds_security_group_id
+  ecs_security_group_id = module.vpc.ecs_security_group_id
+  rds_security_group_id = module.vpc.rds_security_group_id
 }
 
 # ===== ECS Cluster (Shared by all 4 services) =====
@@ -158,31 +176,97 @@ module "ecs_backend" {
   # CloudWatch Logs
   environment        = var.environment
   log_retention_days = var.log_retention_days
+  aws_region         = var.aws_region
 }
 
-# ===== User Service (Customers & Authentication) =====
-module "ecs_user_service" {
-  source = "../../modules/ecs"
+# ===== User Service CloudWatch Log Group =====
+resource "aws_cloudwatch_log_group" "user_service" {
+  name              = "/ecs/sweetdream-user-service"
+  retention_in_days = var.log_retention_days
 
-  # Cluster Configuration
-  cluster_id   = aws_ecs_cluster.main.id
-  cluster_name = aws_ecs_cluster.main.name
+  tags = {
+    Name        = "SweetDream User Service Logs"
+    Environment = var.environment
+  }
+}
+
+# ===== User Service Task Definition for CodeDeploy =====
+resource "aws_ecs_task_definition" "user_service" {
+  family                   = "${var.task_name}-user-service"
+  execution_role_arn       = module.iam.ecs_execution_role_arn
+  task_role_arn            = module.iam.ecs_task_role_arn
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = "512"
+  memory                   = "1024"
+
+  container_definitions = jsonencode([{
+    name      = "sweetdream-user-service"
+    image     = local.user_service_image
+    essential = true
+
+    portMappings = [{
+      containerPort = 3003
+      protocol      = "tcp"
+    }]
+
+    environment = [
+      {
+        name  = "NODE_ENV"
+        value = "production"
+      },
+      {
+        name  = "PORT"
+        value = "3003"
+      },
+      {
+        name  = "DATABASE_URL"
+        value = "postgresql://${var.db_username}:${var.db_password}@${module.rds.db_address}:5432/${var.db_name}"
+      },
+      {
+        name  = "FRONTEND_URL"
+        value = "https://${module.alb.alb_dns_name}"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = "/ecs/sweetdream-user-service"
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+
+  tags = {
+    Name = "SweetDream User Service Task Definition"
+  }
+}
+
+# ===== User Service (CodeDeploy Blue/Green) =====
+module "ecs_user_service_codedeploy" {
+  source = "../../modules/ecs-codedeploy-blue-green"
 
   # Service Configuration
-  task_name      = "${var.task_name}-user-service"
-  service_name   = "${var.service_name}-user-service"
-  container_name = "sweetdream-user-service"
-  container_port = 3003
+  service_name        = "${var.service_name}-user-service"
+  cluster_name        = aws_ecs_cluster.main.name
+  cluster_id          = aws_ecs_cluster.main.id
+  task_definition_arn = aws_ecs_task_definition.user_service.arn
+  container_name      = "sweetdream-user-service"
+  container_port      = 3003
 
-  # Container Image (dynamically from ECR)
-  container_image = local.user_service_image
+  # Target Groups
+  target_group_blue_arn   = module.alb.user_service_blue_target_group_arn
+  target_group_blue_name  = module.alb.user_service_blue_target_group_name
+  target_group_green_arn  = module.alb.user_service_green_target_group_arn
+  target_group_green_name = module.alb.user_service_green_target_group_name
 
-  # Scaling Configuration
-  desired_count = 2
-  min_capacity  = 2
-  max_capacity  = 10
-  task_cpu      = 512
-  task_memory   = 1024
+  # ALB Listener
+  alb_listener_arn = module.alb.http_listener_arn
+
+  # CodeDeploy Role
+  codedeploy_role_arn = module.iam.codedeploy_ecs_role_arn
 
   # Network Configuration
   private_subnet_ids    = module.vpc.private_subnets
@@ -192,46 +276,110 @@ module "ecs_user_service" {
   execution_role_arn = module.iam.ecs_execution_role_arn
   task_role_arn      = module.iam.ecs_task_role_arn
 
-  # Load Balancer (not exposed via ALB, uses service discovery)
-  enable_load_balancer = false
-
-  # Service Discovery (for internal communication)
-  enable_service_discovery = true
-  service_discovery_arn    = module.service_discovery.user_service_arn
-
-  # Database Configuration
-  db_host     = module.rds.db_address
-  db_name     = var.db_name
-  db_username = var.db_username
-  db_password = var.db_password
-
-  # S3 Bucket (not used by user service)
-  s3_bucket = ""
-}
-
-# ===== Order Service (Order Processing) =====
-module "ecs_order_service" {
-  source = "../../modules/ecs"
-
-  # Cluster Configuration
-  cluster_id   = aws_ecs_cluster.main.id
-  cluster_name = aws_ecs_cluster.main.name
-
-  # Service Configuration
-  task_name      = "${var.task_name}-order-service"
-  service_name   = "${var.service_name}-order-service"
-  container_name = "sweetdream-order-service"
-  container_port = 3002
-
-  # Container Image (dynamically from ECR)
-  container_image = local.order_service_image
-
-  # Scaling Configuration
+  # Configuration
   desired_count = 2
-  min_capacity  = 2
-  max_capacity  = 10
   task_cpu      = 512
   task_memory   = 1024
+  environment   = var.environment
+
+  # Ensure ALB listener rules are created first
+  depends_on = [
+    module.alb
+  ]
+}
+
+# ===== Order Service CloudWatch Log Group =====
+resource "aws_cloudwatch_log_group" "order_service" {
+  name              = "/ecs/sweetdream-order-service"
+  retention_in_days = var.log_retention_days
+
+  tags = {
+    Name        = "SweetDream Order Service Logs"
+    Environment = var.environment
+  }
+}
+
+# ===== Order Service Task Definition for CodeDeploy =====
+resource "aws_ecs_task_definition" "order_service" {
+  family                   = "${var.task_name}-order-service"
+  execution_role_arn       = module.iam.ecs_execution_role_arn
+  task_role_arn            = module.iam.ecs_task_role_arn
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = "512"
+  memory                   = "1024"
+
+  container_definitions = jsonencode([{
+    name      = "sweetdream-order-service"
+    image     = local.order_service_image
+    essential = true
+
+    portMappings = [{
+      containerPort = 3002
+      protocol      = "tcp"
+    }]
+
+    environment = [
+      {
+        name  = "NODE_ENV"
+        value = "production"
+      },
+      {
+        name  = "PORT"
+        value = "3002"
+      },
+      {
+        name  = "DATABASE_URL"
+        value = "postgresql://${var.db_username}:${var.db_password}@${module.rds.db_address}:5432/${var.db_name}"
+      },
+      {
+        name  = "USER_SERVICE_URL"
+        value = "http://${module.service_discovery.user_service_dns_name}:3003"
+      },
+      {
+        name  = "FRONTEND_URL"
+        value = "https://${module.alb.alb_dns_name}"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = "/ecs/sweetdream-order-service"
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+
+  tags = {
+    Name = "SweetDream Order Service Task Definition"
+  }
+}
+
+# ===== Order Service (CodeDeploy Blue/Green) =====
+module "ecs_order_service_codedeploy" {
+  source = "../../modules/ecs-codedeploy-blue-green"
+
+  # Service Configuration
+  service_name        = "${var.service_name}-order-service"
+  cluster_name        = aws_ecs_cluster.main.name
+  cluster_id          = aws_ecs_cluster.main.id
+  task_definition_arn = aws_ecs_task_definition.order_service.arn
+  container_name      = "sweetdream-order-service"
+  container_port      = 3002
+
+  # Target Groups
+  target_group_blue_arn   = module.alb.order_service_blue_target_group_arn
+  target_group_blue_name  = module.alb.order_service_blue_target_group_name
+  target_group_green_arn  = module.alb.order_service_green_target_group_arn
+  target_group_green_name = module.alb.order_service_green_target_group_name
+
+  # ALB Listener
+  alb_listener_arn = module.alb.http_listener_arn
+
+  # CodeDeploy Role
+  codedeploy_role_arn = module.iam.codedeploy_ecs_role_arn
 
   # Network Configuration
   private_subnet_ids    = module.vpc.private_subnets
@@ -241,24 +389,16 @@ module "ecs_order_service" {
   execution_role_arn = module.iam.ecs_execution_role_arn
   task_role_arn      = module.iam.ecs_task_role_arn
 
-  # Load Balancer (not exposed via ALB, uses service discovery)
-  enable_load_balancer = false
+  # Configuration
+  desired_count = 2
+  task_cpu      = 512
+  task_memory   = 1024
+  environment   = var.environment
 
-  # Service Discovery (for internal communication)
-  enable_service_discovery = true
-  service_discovery_arn    = module.service_discovery.order_service_arn
-
-  # Database Configuration
-  db_host     = module.rds.db_address
-  db_name     = var.db_name
-  db_username = var.db_username
-  db_password = var.db_password
-
-  # S3 Bucket (not used by order service)
-  s3_bucket = ""
-
-  # Service-to-Service Communication
-  user_service_url = "http://${module.service_discovery.user_service_dns_name}:3003"
+  # Ensure ALB listener rules are created first
+  depends_on = [
+    module.alb
+  ]
 }
 
 # ===== Frontend CloudWatch Log Group =====
@@ -303,11 +443,11 @@ resource "aws_ecs_task_definition" "frontend" {
       },
       {
         name  = "USER_SERVICE_URL"
-        value = "http://${module.service_discovery.user_service_dns_name}:3003"
+        value = "http://${module.alb.alb_dns_name}"
       },
       {
         name  = "ORDER_SERVICE_URL"
-        value = "http://${module.service_discovery.order_service_dns_name}:3002"
+        value = "http://${module.alb.alb_dns_name}"
       }
     ]
 
@@ -339,8 +479,13 @@ module "ecs_frontend_codedeploy" {
   container_port      = 3000
 
   # Target Groups
-  target_group_blue_arn  = module.alb.frontend_blue_target_group_arn
-  target_group_green_arn = module.alb.frontend_green_target_group_arn
+  target_group_blue_arn   = module.alb.frontend_blue_target_group_arn
+  target_group_blue_name  = module.alb.frontend_blue_target_group_name
+  target_group_green_arn  = module.alb.frontend_green_target_group_arn
+  target_group_green_name = module.alb.frontend_green_target_group_name
+
+  # ALB Listener
+  alb_listener_arn = module.alb.http_listener_arn
 
   # CodeDeploy Role
   codedeploy_role_arn = module.iam.codedeploy_ecs_role_arn
@@ -358,6 +503,11 @@ module "ecs_frontend_codedeploy" {
   task_cpu      = 512
   task_memory   = 1024
   environment   = var.environment
+
+  # Ensure ALB listener rules are created first
+  depends_on = [
+    module.alb
+  ]
 }
 
 # Local values

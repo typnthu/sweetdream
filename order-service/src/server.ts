@@ -6,12 +6,39 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import Joi from 'joi';
 import axios from 'axios';
+import { requestLogger } from './middleware/requestLogger';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3002;
-const prisma = new PrismaClient();
+
+// Enhanced Prisma client with query logging
+const prisma = new PrismaClient({
+  log: [
+    { level: 'query', emit: 'event' },
+    { level: 'error', emit: 'event' },
+    { level: 'info', emit: 'event' },
+    { level: 'warn', emit: 'event' },
+  ],
+});
+
+// Prisma query logging
+prisma.$on('query', (e) => {
+  console.log(`[OrderService:DB]  QUERY`, {
+    query: e.query,
+    params: e.params,
+    duration: `${e.duration}ms`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+prisma.$on('error', (e) => {
+  console.error(`[OrderService:DB]  DATABASE ERROR`, {
+    message: e.message,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // User service URL
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3003';
@@ -25,6 +52,9 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Enhanced request logging
+app.use(requestLogger);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -463,15 +493,52 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-app.listen(port, () => {
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
-    level: 'INFO',
+// Enhanced Error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const requestId = req.headers['x-request-id'] || 'unknown';
+  
+  console.error(`[OrderService:${requestId}] UNHANDLED ERROR`, {
     service: 'order-service',
-    message: 'Server started',
+    requestId,
+    error: err.message,
+    stack: err.stack,
+    method: req.method,
+    url: req.url,
+    body: req.body,
+    query: req.query,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    timestamp: new Date().toISOString()
+  });
+  
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Internal server error' 
+      : err.message,
+    service: 'order-service',
+    requestId,
+    timestamp: new Date().toISOString(),
+    ...(process.env.NODE_ENV !== 'production' && { 
+      stack: err.stack,
+      details: {
+        method: req.method,
+        url: req.url
+      }
+    })
+  });
+});
+app.listen(port, () => {
+  console.log(`[OrderService] SERVICE STARTED`, {
+    service: 'order-service',
     port,
-    userServiceUrl: USER_SERVICE_URL
-  }));
+    environment: process.env.NODE_ENV || 'development',
+    healthCheck: `http://localhost:${port}/health`,
+    userServiceUrl: USER_SERVICE_URL,
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    platform: process.platform,
+    memory: process.memoryUsage()
+  });
 });
 
 export default app;

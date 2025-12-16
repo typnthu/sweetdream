@@ -1,0 +1,11 @@
+{
+  "applicationName": "sweetdream-service-user-service-codedeploy",
+  "deploymentGroupName": "sweetdream-service-user-service-deployment-group",
+  "description": "Fixed user service deployment with correct DB endpoint",
+  "revision": {
+    "revisionType": "AppSpecContent",
+    "appSpecContent": {
+      "content": "{\"version\":\"0.0\",\"Resources\":[{\"TargetService\":{\"Type\":\"AWS::ECS::Service\",\"Properties\":{\"TaskDefinition\":\"arn:aws:ecs:us-west-2:409964509537:task-definition/sweetdream-task-user-service:4\",\"LoadBalancerInfo\":{\"ContainerName\":\"sweetdream-user-service\",\"ContainerPort\":3003}}}}]}"
+    }
+  }
+}

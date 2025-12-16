@@ -1,0 +1,31 @@
+# Production Environment Configuration Example
+# Copy this file to terraform.tfvars and update with your actual values
+
+# Database Configuration (CHANGE THESE IN PRODUCTION!)
+db_username = "postgres"
+db_password = "CHANGE_ME_IN_PRODUCTION"
+
+# Environment Settings
+environment = "production"
+aws_region  = "us-east-2"
+
+# Naming
+cluster_name = "sweetdream-prod-cluster"
+task_name    = "sweetdream-prod-task"
+service_name = "sweetdream-prod-service"
+
+# Database
+db_name = "sweetdream_prod"
+
+# S3 Bucket (must be globally unique)
+s3_bucket_name = "sweetdream-logs-data-prod-YOUR_SUFFIX"
+
+# Monitoring
+alert_email = "your-email@company.com"
+log_retention_days = 30
+
+# Security
+enable_bastion = false
+
+# SSL Certificate (set this to your actual certificate ARN)
+acm_certificate_arn = "arn:aws:acm:us-east-2:123456789012:certificate/your-cert-id"

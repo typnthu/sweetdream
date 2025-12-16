@@ -27,7 +27,7 @@ log_error() {
 }
 
 main() {
-    log_info "🚀 Deploying SweetDream to Development Environment"
+    log_info "Deploying SweetDream to Development Environment"
     log_info "Region: $REGION"
     log_info "Environment: $ENVIRONMENT"
     
@@ -49,8 +49,8 @@ main() {
     log_info "Deployment completed! Outputs:"
     terraform output
     
-    log_info "✅ Development environment deployed successfully!"
-    log_info "🌐 Access your app at: $(terraform output -raw dev_alb_url)"
+    log_info "Development environment deployed successfully!"
+    log_info "Access your app at: $(terraform output -raw dev_alb_url)"
 }
 
 main "$@"

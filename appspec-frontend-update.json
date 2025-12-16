@@ -1,0 +1,17 @@
+{
+  "version": "0.0",
+  "Resources": [
+    {
+      "TargetService": {
+        "Type": "AWS::ECS::Service",
+        "Properties": {
+          "TaskDefinition": "arn:aws:ecs:us-west-2:409964509537:task-definition/sweetdream-task-frontend:3",
+          "LoadBalancerInfo": {
+            "ContainerName": "sweetdream-frontend",
+            "ContainerPort": 3000
+          }
+        }
+      }
+    }
+  ]
+}

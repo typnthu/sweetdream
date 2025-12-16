@@ -1,4 +1,4 @@
-# Development Environment - US-West-2
+# Development Environment - US-East-1
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -66,7 +66,8 @@ data "aws_security_group" "existing_ecs" {
 }
 
 module "iam" {
-  source = "../../modules/iam"
+  source      = "../../modules/iam"
+  environment = var.environment
 }
 
 module "s3" {
@@ -86,6 +87,7 @@ module "alb" {
   public_subnet_ids     = data.aws_subnets.public.ids
   ecs_security_group_id = data.aws_security_group.existing_ecs.id
   acm_certificate_arn   = var.acm_certificate_arn
+  environment           = var.environment
 
   traffic_weights = {
     frontend = {
@@ -111,7 +113,16 @@ module "secrets_manager" {
   db_password = var.db_password
 }
 
-# RDS Database was deleted during migration - using hardcoded connection string
+# ===== RDS Database =====
+module "rds" {
+  source                = "../../modules/rds"
+  db_name               = var.db_name
+  db_username           = var.db_username
+  db_password           = var.db_password
+  vpc_id                = data.aws_vpc.existing.id
+  private_subnet_ids    = data.aws_subnets.private.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
+}
 
 # ===== ECS Cluster (Shared by all 4 services) =====
 resource "aws_ecs_cluster" "main" {
@@ -178,8 +189,8 @@ module "ecs_backend" {
   enable_service_discovery = true
   service_discovery_arn    = module.service_discovery.backend_service_arn
 
-  # Database Configuration (using existing RDS instance)
-  db_host     = "sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com"
+  # Database Configuration
+  db_host     = module.rds.db_address
   db_name     = var.db_name
   db_username = var.db_username
   db_password = var.db_password
@@ -231,8 +242,8 @@ module "ecs_user_service" {
   enable_service_discovery = true
   service_discovery_arn    = module.service_discovery.user_service_arn
 
-  # Database Configuration (using existing RDS instance)
-  db_host     = "sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com"
+  # Database Configuration
+  db_host     = module.rds.db_address
   db_name     = var.db_name
   db_username = var.db_username
   db_password = var.db_password
@@ -280,8 +291,8 @@ module "ecs_order_service" {
   enable_service_discovery = true
   service_discovery_arn    = module.service_discovery.order_service_arn
 
-  # Database Configuration (using existing RDS instance)
-  db_host     = "sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com"
+  # Database Configuration
+  db_host     = module.rds.db_address
   db_name     = var.db_name
   db_username = var.db_username
   db_password = var.db_password
@@ -293,96 +304,31 @@ module "ecs_order_service" {
   user_service_url = "http://${module.service_discovery.user_service_dns_name}:3003"
 }
 
-# ===== Frontend CloudWatch Log Group =====
-resource "aws_cloudwatch_log_group" "frontend" {
-  name              = "/ecs/sweetdream-frontend"
-  retention_in_days = var.log_retention_days
+# ===== Frontend Service (Simple ECS - No Blue/Green in Dev) =====
+module "ecs_frontend" {
+  source = "../../modules/ecs"
 
-  tags = {
-    Name        = "SweetDream Frontend Logs"
-    Environment = var.environment
-  }
-}
-
-# ===== Frontend Task Definition for CodeDeploy =====
-resource "aws_ecs_task_definition" "frontend" {
-  family                   = "${var.task_name}-frontend"
-  execution_role_arn       = module.iam.ecs_execution_role_arn
-  task_role_arn            = module.iam.ecs_task_role_arn
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
-
-  container_definitions = jsonencode([{
-    name      = "sweetdream-frontend"
-    image     = local.frontend_image
-    essential = true
-
-    portMappings = [{
-      containerPort = 3000
-      protocol      = "tcp"
-    }]
-
-    environment = [
-      {
-        name  = "NEXT_PUBLIC_API_URL"
-        value = "/api/proxy"
-      },
-      {
-        name  = "BACKEND_API_URL"
-        value = "http://${module.service_discovery.backend_dns_name}:3001"
-      },
-      {
-        name  = "USER_SERVICE_URL"
-        value = "http://${module.service_discovery.user_service_dns_name}:3003"
-      },
-      {
-        name  = "ORDER_SERVICE_URL"
-        value = "http://${module.service_discovery.order_service_dns_name}:3002"
-      }
-    ]
-
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = "/ecs/sweetdream-frontend"
-        "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ecs"
-      }
-    }
-  }])
-
-  tags = {
-    Name = "SweetDream Frontend Task Definition"
-  }
-}
-
-# ===== Frontend Service (CodeDeploy Blue/Green) =====
-module "ecs_frontend_codedeploy" {
-  source = "../../modules/ecs-codedeploy-blue-green"
+  # Cluster Configuration
+  cluster_id   = aws_ecs_cluster.main.id
+  cluster_name = aws_ecs_cluster.main.name
 
   # Service Configuration
-  service_name        = "${var.service_name}-frontend"
-  cluster_name        = aws_ecs_cluster.main.name
-  cluster_id          = aws_ecs_cluster.main.id
-  task_definition_arn = aws_ecs_task_definition.frontend.arn
-  container_name      = "sweetdream-frontend"
-  container_port      = 3000
+  task_name      = "${var.task_name}-frontend"
+  service_name   = "${var.service_name}-frontend"
+  container_name = "sweetdream-frontend"
+  container_port = 3000
 
-  # Target Groups
-  target_group_blue_arn   = module.alb.frontend_blue_target_group_arn
-  target_group_blue_name  = module.alb.frontend_blue_target_group_name
-  target_group_green_arn  = module.alb.frontend_green_target_group_arn
-  target_group_green_name = module.alb.frontend_green_target_group_name
+  # Container Image (dynamically from ECR)
+  container_image = local.frontend_image
 
-  # ALB Listener
-  alb_listener_arn = module.alb.http_listener_arn
+  # Scaling Configuration
+  desired_count = 2
+  min_capacity  = 1
+  max_capacity  = 4
+  task_cpu      = 512
+  task_memory   = 1024
 
-  # CodeDeploy Role
-  codedeploy_role_arn = module.iam.codedeploy_ecs_role_arn
-
-  # Network Configuration (use existing VPC subnets to match backend services)
+  # Network Configuration
   private_subnet_ids    = data.aws_subnets.private.ids
   ecs_security_group_id = data.aws_security_group.existing_ecs.id
 
@@ -390,11 +336,32 @@ module "ecs_frontend_codedeploy" {
   execution_role_arn = module.iam.ecs_execution_role_arn
   task_role_arn      = module.iam.ecs_task_role_arn
 
-  # Configuration
-  desired_count = 2
-  task_cpu      = 512
-  task_memory   = 1024
-  environment   = var.environment
+  # Load Balancer (Frontend is exposed via ALB)
+  enable_load_balancer = true
+  target_group_arn     = module.alb.frontend_blue_target_group_arn
+
+  # Service Discovery (not needed for frontend)
+  enable_service_discovery = false
+
+  # Database Configuration (not used by frontend)
+  db_host     = ""
+  db_name     = ""
+  db_username = ""
+  db_password = ""
+
+  # S3 Bucket (not used by frontend)
+  s3_bucket = ""
+
+  # Backend URL (for frontend environment variables)
+  backend_url = "http://${module.service_discovery.backend_dns_name}:3001"
+
+  # Service URLs (for frontend environment variables)
+  user_service_url  = "http://${module.service_discovery.user_service_dns_name}:3003"
+  order_service_url = "http://${module.service_discovery.order_service_dns_name}:3002"
+
+  # CloudWatch Logs
+  environment        = var.environment
+  log_retention_days = var.log_retention_days
 }
 
 # ===== Bastion Host (for dev debugging) =====
@@ -408,8 +375,8 @@ module "bastion" {
   rds_security_group_id = data.aws_security_group.existing_ecs.id
   instance_type         = "t3.micro"
 
-  # Database connection info (using existing RDS instance)
-  db_host     = "sweetdream-db.csn0cigocj2w.us-east-1.rds.amazonaws.com"
+  # Database connection info
+  db_host     = module.rds.db_address
   db_name     = var.db_name
   db_username = var.db_username
 
@@ -428,10 +395,10 @@ locals {
   region     = data.aws_region.current.name
 
   # ECR image URIs (from ECR module)
-  backend_image       = "${module.ecr.backend_repository_url}:dev"
-  frontend_image      = "${module.ecr.frontend_repository_url}:dev"
-  user_service_image  = "${module.ecr.user_service_repository_url}:dev"
-  order_service_image = "${module.ecr.order_service_repository_url}:dev"
+  backend_image       = "${module.ecr.backend_repository_url}:latest"
+  frontend_image      = "${module.ecr.frontend_repository_url}:latest"
+  user_service_image  = "${module.ecr.user_service_repository_url}:latest"
+  order_service_image = "${module.ecr.order_service_repository_url}:latest"
 }
 
 data "aws_caller_identity" "current" {}

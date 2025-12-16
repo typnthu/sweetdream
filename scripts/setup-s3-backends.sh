@@ -60,11 +60,11 @@ create_s3_bucket() {
         --public-access-block-configuration \
         BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
     
-    log_info "✅ S3 bucket $bucket_name created successfully"
+    log_info "S3 bucket $bucket_name created successfully"
 }
 
 main() {
-    log_info "🚀 Setting up S3 backends for multi-environment deployment"
+    log_info "Setting up S3 backends for multi-environment deployment"
     
     # Check AWS CLI
     if ! command -v aws &> /dev/null; then
@@ -82,7 +82,7 @@ main() {
     create_s3_bucket "sweetdream-terraform-state-dev" "us-east-1"
     create_s3_bucket "sweetdream-terraform-state-prod" "us-west-2"
     
-    log_info "✅ All S3 backends created successfully!"
+    log_info "All S3 backends created successfully!"
     log_info ""
     log_info "Next steps:"
     log_info "1. Deploy development: ./scripts/deploy-dev.sh"

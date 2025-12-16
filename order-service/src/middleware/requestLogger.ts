@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { cwLogger } from '../utils/cloudwatchLogger';
 
 // Helper function to sanitize sensitive data
 function sanitizeData(data: any): any {
@@ -25,6 +24,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   
   // Enhanced request logging
   const requestInfo: any = {
+    service: 'order-service',
     requestId,
     method: req.method,
     url: req.url,
@@ -33,17 +33,12 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     ip: req.ip || req.socket.remoteAddress,
     userAgent: req.headers['user-agent'],
     contentType: req.headers['content-type'],
-    contentLength: req.headers['content-length'],
     authorization: req.headers.authorization ? 'Bearer [PRESENT]' : 'none',
-    referer: req.headers.referer,
-    origin: req.headers.origin,
     timestamp: new Date().toISOString(),
     headers: {
       'x-forwarded-for': req.headers['x-forwarded-for'],
       'x-real-ip': req.headers['x-real-ip'],
-      'x-request-id': req.headers['x-request-id'],
-      'accept': req.headers.accept,
-      'accept-language': req.headers['accept-language']
+      'x-request-id': req.headers['x-request-id']
     }
   };
 
@@ -53,7 +48,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     requestInfo.bodySize = JSON.stringify(req.body).length;
   }
 
-  console.log(`[Backend:${requestId}] REQUEST START ${JSON.stringify(requestInfo)}`);
+  console.log(`[OrderService:${requestId}] REQUEST START ${JSON.stringify(requestInfo)}`);
 
   // Capture response
   const originalSend = res.send;
@@ -73,6 +68,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     const responseTime = Date.now() - startTime;
     
     const responseInfo: any = {
+      service: 'order-service',
       requestId,
       method: req.method,
       url: req.url,
@@ -85,8 +81,8 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
       timestamp: new Date().toISOString()
     };
 
-    // Add response data for non-sensitive endpoints (limit large responses)
-    if (res.statusCode < 400 && data && !req.url.includes('auth')) {
+    // Add response data for successful requests (limit large responses)
+    if (res.statusCode < 400 && data) {
       const dataSize = responseInfo.dataSize;
       if (dataSize < 1000) {
         responseInfo.responseData = sanitizeData(data);
@@ -100,43 +96,28 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
 
     // Different log levels based on status
     if (res.statusCode >= 500) {
-      console.error(`[Backend:${requestId}] SERVER ERROR ${JSON.stringify(responseInfo)}`);
+      console.error(`[OrderService:${requestId}] SERVER ERROR ${JSON.stringify(responseInfo)}`);
     } else if (res.statusCode >= 400) {
-      console.warn(`[Backend:${requestId}] CLIENT ERROR ${JSON.stringify(responseInfo)}`);
+      console.warn(`[OrderService:${requestId}] CLIENT ERROR ${JSON.stringify(responseInfo)}`);
     } else {
-      console.log(`[Backend:${requestId}] SUCCESS ${JSON.stringify(responseInfo)}`);
+      console.log(`[OrderService:${requestId}] SUCCESS ${JSON.stringify(responseInfo)}`);
     }
-    
-    // Log to CloudWatch
-    cwLogger.apiRequest(
-      req.method,
-      req.url,
-      res.statusCode,
-      responseTime,
-      {
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
-        userId: (req as any).user?.id,
-        requestId,
-        contentLength: responseInfo.dataSize,
-        referer: req.headers.referer
-      }
-    );
 
     // Enhanced error logging
     if (res.statusCode >= 400) {
-      cwLogger.error('API Error', undefined, {
+      console.error(`[OrderService:${requestId}] ERROR DETAILS ${JSON.stringify({
         requestId,
         method: req.method,
         url: req.url,
         statusCode: res.statusCode,
         responseTime,
-        errorData: data,
+        errorData: sanitizeData(data),
         requestBody: sanitizeData(req.body),
         query: req.query,
         ip: req.ip,
-        userAgent: req.headers['user-agent']
-      });
+        userAgent: req.headers['user-agent'],
+        stack: data?.stack || 'No stack trace'
+      })}`);
     }
   }
 

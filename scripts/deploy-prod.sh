@@ -5,7 +5,7 @@ set -e
 
 # Configuration
 ENVIRONMENT="prod"
-REGION="us-west-2"
+REGION="us-east-2"
 TERRAFORM_DIR="terraform/environments/prod"
 
 # Colors for output
@@ -27,12 +27,12 @@ log_error() {
 }
 
 main() {
-    log_info "🚀 Deploying SweetDream to Production Environment"
+    log_info "Deploying SweetDream to Production Environment"
     log_info "Region: $REGION"
     log_info "Environment: $ENVIRONMENT"
     
     # Confirmation for production
-    read -p "⚠️  Are you sure you want to deploy to PRODUCTION? (yes/no): " confirm
+    read -p "Are you sure you want to deploy to PRODUCTION? (yes/no): " confirm
     if [ "$confirm" != "yes" ]; then
         log_warn "Production deployment cancelled"
         exit 0
@@ -49,7 +49,7 @@ main() {
     terraform plan
     
     # Final confirmation
-    read -p "🔍 Review the plan above. Continue with production deployment? (yes/no): " final_confirm
+    read -p "Review the plan above. Continue with production deployment? (yes/no): " final_confirm
     if [ "$final_confirm" != "yes" ]; then
         log_warn "Production deployment cancelled"
         exit 0
@@ -63,8 +63,8 @@ main() {
     log_info "Deployment completed! Outputs:"
     terraform output
     
-    log_info "✅ Production environment deployed successfully!"
-    log_info "🌐 Access your app at: $(terraform output -raw prod_alb_url)"
+    log_info "Production environment deployed successfully!"
+    log_info "Access your app at: $(terraform output -raw prod_alb_url)"
 }
 
 main "$@"

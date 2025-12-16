@@ -19,6 +19,12 @@ variable "acm_certificate_arn" {
   default     = null
 }
 
+variable "environment" {
+  description = "Environment name (development, production)"
+  type        = string
+  default     = "production"
+}
+
 variable "traffic_weights" {
   description = "Weight distribution for Blue/Green deployment across all services"
 

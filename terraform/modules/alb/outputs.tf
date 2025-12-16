@@ -61,6 +61,48 @@ output "backend_green_target_group_name" {
   value       = aws_lb_target_group.backend_green.name
 }
 
+# User Service Target Groups
+output "user_service_blue_target_group_arn" {
+  description = "ARN of the user service blue target group"
+  value       = aws_lb_target_group.user_service_blue.arn
+}
+
+output "user_service_green_target_group_arn" {
+  description = "ARN of the user service green target group"
+  value       = aws_lb_target_group.user_service_green.arn
+}
+
+output "user_service_blue_target_group_name" {
+  description = "Name of the user service blue target group"
+  value       = aws_lb_target_group.user_service_blue.name
+}
+
+output "user_service_green_target_group_name" {
+  description = "Name of the user service green target group"
+  value       = aws_lb_target_group.user_service_green.name
+}
+
+# Order Service Target Groups
+output "order_service_blue_target_group_arn" {
+  description = "ARN of the order service blue target group"
+  value       = aws_lb_target_group.order_service_blue.arn
+}
+
+output "order_service_green_target_group_arn" {
+  description = "ARN of the order service green target group"
+  value       = aws_lb_target_group.order_service_green.arn
+}
+
+output "order_service_blue_target_group_name" {
+  description = "Name of the order service blue target group"
+  value       = aws_lb_target_group.order_service_blue.name
+}
+
+output "order_service_green_target_group_name" {
+  description = "Name of the order service green target group"
+  value       = aws_lb_target_group.order_service_green.name
+}
+
 output "alb_security_group_id" {
   description = "Security group ID for ALB"
   value       = aws_security_group.alb.id
@@ -69,4 +111,15 @@ output "alb_security_group_id" {
 output "http_listener_arn" {
   description = "ARN of the HTTP listener"
   value       = aws_lb_listener.http.arn
+}
+
+# Listener Rules for Dependencies
+output "user_service_listener_rule_http_arn" {
+  description = "ARN of the user service HTTP listener rule"
+  value       = var.environment == "production" ? aws_lb_listener_rule.user_service_rule_http[0].arn : null
+}
+
+output "order_service_listener_rule_http_arn" {
+  description = "ARN of the order service HTTP listener rule"
+  value       = var.environment == "production" ? aws_lb_listener_rule.order_service_rule_http[0].arn : null
 }
