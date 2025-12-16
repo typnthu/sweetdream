@@ -9,11 +9,16 @@ resource "aws_vpc" "main" {
   }
 }
 
+# Get available AZs in the current region
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 # Public Subnets (for ALB)
 resource "aws_subnet" "public_1" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 8, 1)
-  availability_zone       = "us-east-1a"
+  availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
   tags = {
@@ -24,7 +29,7 @@ resource "aws_subnet" "public_1" {
 resource "aws_subnet" "public_2" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 8, 2)
-  availability_zone       = "us-east-1b"
+  availability_zone       = data.aws_availability_zones.available.names[1]
   map_public_ip_on_launch = true
 
   tags = {
@@ -36,7 +41,7 @@ resource "aws_subnet" "public_2" {
 resource "aws_subnet" "private_1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 8, 11)
-  availability_zone = "us-east-1a"
+  availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = {
     Name = "sweetdream-private-subnet-1"
@@ -46,7 +51,7 @@ resource "aws_subnet" "private_1" {
 resource "aws_subnet" "private_2" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 8, 12)
-  availability_zone = "us-east-1b"
+  availability_zone = data.aws_availability_zones.available.names[1]
 
   tags = {
     Name = "sweetdream-private-subnet-2"

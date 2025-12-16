@@ -1,64 +1,127 @@
-#main.tf
-# Analytics enabled via GitHub variables
+# Development Environment - US-East-1
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "sweetdream-terraform-state-dev"
+    key    = "dev/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Environment = "development"
+      Project     = "SweetDream"
+      ManagedBy   = "Terraform"
+      Region      = var.aws_region
+    }
+  }
+}
 
 # ===== ECR Repositories (must be created first) =====
 module "ecr" {
-  source      = "./modules/ecr"
+  source      = "../../modules/ecr"
   environment = var.environment
 }
 
-module "vpc" {
-  source     = "./modules/vpc"
-  vpc_cidr   = var.vpc_cidr
-  aws_region = var.aws_region
+# Use existing VPC instead of creating new one
+data "aws_vpc" "existing" {
+  id = "vpc-036b4659e08935b92"
+}
+
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.existing.id]
+  }
+  filter {
+    name   = "map-public-ip-on-launch"
+    values = ["true"]
+  }
+}
+
+data "aws_subnets" "private" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.existing.id]
+  }
+  filter {
+    name   = "map-public-ip-on-launch"
+    values = ["false"]
+  }
+}
+
+data "aws_security_group" "existing_ecs" {
+  id = "sg-0efe98ed68d343ac0"
 }
 
 module "iam" {
-  source = "./modules/iam"
+  source      = "../../modules/iam"
+  environment = var.environment
 }
 
 module "s3" {
-  source      = "./modules/s3"
+  source      = "../../modules/s3"
   bucket_name = var.s3_bucket_name
 }
 
 module "service_discovery" {
-  source         = "./modules/service-discovery"
+  source         = "../../modules/service-discovery"
   namespace_name = "sweetdream.local"
-  vpc_id         = module.vpc.vpc_id
+  vpc_id         = data.aws_vpc.existing.id
 }
 
 module "alb" {
-  source                = "./modules/alb"
-  vpc_id                = module.vpc.vpc_id
-  public_subnet_ids     = module.vpc.public_subnets
-  ecs_security_group_id = module.vpc.ecs_security_group_id
+  source                = "../../modules/alb"
+  vpc_id                = data.aws_vpc.existing.id
+  public_subnet_ids     = data.aws_subnets.public.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
+  acm_certificate_arn   = var.acm_certificate_arn
+  environment           = var.environment
 
-  # Blue/Green deployment weights (20-40-40 split)
-  frontend_blue_weight       = 20
-  frontend_green_weight      = 40
-  user_service_blue_weight   = 20
-  user_service_green_weight  = 40
-  order_service_blue_weight  = 20
-  order_service_green_weight = 40
+  traffic_weights = {
+    frontend = {
+      blue  = 100
+      green = 0
+    }
+    user_service = {
+      blue  = 100
+      green = 0
+    }
+    order_service = {
+      blue  = 100
+      green = 0
+    }
+  }
 }
 
 module "secrets_manager" {
-  source      = "./modules/secrets-manager"
+  source      = "../../modules/secrets-manager"
   app_name    = "sweetdream"
   secret_name = "sweetdream-db-secret"
   db_username = var.db_username
   db_password = var.db_password
 }
 
+# ===== RDS Database =====
 module "rds" {
-  source                = "./modules/rds"
+  source                = "../../modules/rds"
   db_name               = var.db_name
   db_username           = var.db_username
   db_password           = var.db_password
-  vpc_id                = module.vpc.vpc_id
-  private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.rds_security_group_id
+  vpc_id                = data.aws_vpc.existing.id
+  private_subnet_ids    = data.aws_subnets.private.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
 }
 
 # ===== ECS Cluster (Shared by all 4 services) =====
@@ -89,7 +152,7 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 
 # ===== Backend Service (Products & Categories) =====
 module "ecs_backend" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -112,8 +175,8 @@ module "ecs_backend" {
   task_memory   = 512
 
   # Network Configuration
-  private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.ecs_security_group_id
+  private_subnet_ids    = data.aws_subnets.private.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
 
   # IAM Roles
   execution_role_arn = module.iam.ecs_execution_role_arn
@@ -135,36 +198,14 @@ module "ecs_backend" {
   # S3 Bucket
   s3_bucket = module.s3.bucket_name
 
-  # CloudWatch Logs & Analytics
-  environment              = var.environment
-  log_retention_days       = var.log_retention_days
-  enable_analytics_queries = var.enable_customer_analytics
-}
-
-# ===== Backend Analytics (Export to S3) =====
-module "backend_analytics" {
-  count  = var.enable_customer_analytics ? 1 : 0
-  source = "./modules/cloudwatch-analytics"
-
-  service_name          = "${var.service_name}-backend"
-  log_group_name        = "/ecs/sweetdream-${var.service_name}-backend"
-  analytics_bucket_name = "${var.analytics_bucket_prefix}-backend-${var.environment}"
-  export_format         = "json" # json or csv
-  enable_lambda_export  = true   # Enable Lambda for automated exports
-
-  # Filter only user action logs (optional - remove to export all logs)
-  filter_pattern = ""
-
-  tags = {
-    Environment = var.environment
-    Service     = "backend"
-    Purpose     = "Customer Analytics"
-  }
+  # CloudWatch Logs
+  environment        = var.environment
+  log_retention_days = var.log_retention_days
 }
 
 # ===== User Service (Customers & Authentication) =====
 module "ecs_user_service" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -187,8 +228,8 @@ module "ecs_user_service" {
   task_memory   = 512
 
   # Network Configuration
-  private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.ecs_security_group_id
+  private_subnet_ids    = data.aws_subnets.private.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
 
   # IAM Roles
   execution_role_arn = module.iam.ecs_execution_role_arn
@@ -213,7 +254,7 @@ module "ecs_user_service" {
 
 # ===== Order Service (Order Processing) =====
 module "ecs_order_service" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -236,8 +277,8 @@ module "ecs_order_service" {
   task_memory   = 512
 
   # Network Configuration
-  private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.ecs_security_group_id
+  private_subnet_ids    = data.aws_subnets.private.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
 
   # IAM Roles
   execution_role_arn = module.iam.ecs_execution_role_arn
@@ -263,9 +304,9 @@ module "ecs_order_service" {
   user_service_url = "http://${module.service_discovery.user_service_dns_name}:3003"
 }
 
-# ===== Frontend Service (Next.js Application) =====
+# ===== Frontend Service (Simple ECS - No Blue/Green in Dev) =====
 module "ecs_frontend" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -280,16 +321,16 @@ module "ecs_frontend" {
   # Container Image (dynamically from ECR)
   container_image = local.frontend_image
 
-  # Scaling Configuration (Frontend needs more resources)
+  # Scaling Configuration
   desired_count = 2
   min_capacity  = 1
-  max_capacity  = 6
+  max_capacity  = 4
   task_cpu      = 512
   task_memory   = 1024
 
   # Network Configuration
-  private_subnet_ids    = module.vpc.private_subnets
-  ecs_security_group_id = module.vpc.ecs_security_group_id
+  private_subnet_ids    = data.aws_subnets.private.ids
+  ecs_security_group_id = data.aws_security_group.existing_ecs.id
 
   # IAM Roles
   execution_role_arn = module.iam.ecs_execution_role_arn
@@ -297,13 +338,12 @@ module "ecs_frontend" {
 
   # Load Balancer (Frontend is exposed via ALB)
   enable_load_balancer = true
-  target_group_arn     = module.alb.frontend_target_group_arn
+  target_group_arn     = module.alb.frontend_blue_target_group_arn
 
-
-  # Service Discovery (Frontend doesn't need it, uses ALB)
+  # Service Discovery (not needed for frontend)
   enable_service_discovery = false
 
-  # Database Configuration (Frontend doesn't need DB)
+  # Database Configuration (not used by frontend)
   db_host     = ""
   db_name     = ""
   db_username = ""
@@ -312,47 +352,27 @@ module "ecs_frontend" {
   # S3 Bucket (not used by frontend)
   s3_bucket = ""
 
-  # Service-to-Service Communication URLs
-  backend_url       = "http://${module.service_discovery.backend_dns_name}:3001"
+  # Backend URL (for frontend environment variables)
+  backend_url = "http://${module.service_discovery.backend_dns_name}:3001"
+
+  # Service URLs (for frontend environment variables)
   user_service_url  = "http://${module.service_discovery.user_service_dns_name}:3003"
   order_service_url = "http://${module.service_discovery.order_service_dns_name}:3002"
 
-  # CloudWatch Logs & Analytics
-  environment              = var.environment
-  log_retention_days       = var.log_retention_days
-  enable_analytics_queries = var.enable_customer_analytics
+  # CloudWatch Logs
+  environment        = var.environment
+  log_retention_days = var.log_retention_days
 }
 
-# ===== Order Service Analytics (Export to S3) =====
-module "order_analytics" {
-  count  = var.enable_customer_analytics ? 1 : 0
-  source = "./modules/cloudwatch-analytics"
-
-  service_name          = "${var.service_name}-order-service"
-  log_group_name        = "/ecs/sweetdream-${var.service_name}-order-service"
-  analytics_bucket_name = "${var.analytics_bucket_prefix}-order-${var.environment}"
-  export_format         = "json" # json or csv
-  enable_lambda_export  = true   # Enable Lambda for automated exports
-
-  # Filter only user action logs (optional)
-  filter_pattern = ""
-
-  tags = {
-    Environment = var.environment
-    Service     = "order-service"
-    Purpose     = "Customer Analytics"
-  }
-}
-
-# ===== Bastion Host (Temporary - for RDS Access) =====
+# ===== Bastion Host (for dev debugging) =====
 module "bastion" {
   count  = var.enable_bastion ? 1 : 0
-  source = "./modules/bastion"
+  source = "../../modules/bastion"
 
   name_prefix           = var.service_name
-  vpc_id                = module.vpc.vpc_id
-  subnet_id             = module.vpc.private_subnets[0] # Private subnet - access via SSM
-  rds_security_group_id = module.vpc.rds_security_group_id
+  vpc_id                = data.aws_vpc.existing.id
+  subnet_id             = data.aws_subnets.private.ids[0]
+  rds_security_group_id = data.aws_security_group.existing_ecs.id
   instance_type         = "t3.micro"
 
   # Database connection info
@@ -360,10 +380,7 @@ module "bastion" {
   db_name     = var.db_name
   db_username = var.db_username
 
-  # Optional: Create EIP for consistent public IP
-  create_eip = false # No EIP needed with SSM
-
-  # Optional: SSH key pair (if you want SSH access)
+  create_eip      = false
   create_key_pair = false
 
   tags = {
@@ -371,3 +388,18 @@ module "bastion" {
     Purpose     = "Database Access"
   }
 }
+
+# Local values
+locals {
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.name
+
+  # ECR image URIs (from ECR module)
+  backend_image       = "${module.ecr.backend_repository_url}:latest"
+  frontend_image      = "${module.ecr.frontend_repository_url}:latest"
+  user_service_image  = "${module.ecr.user_service_repository_url}:latest"
+  order_service_image = "${module.ecr.order_service_repository_url}:latest"
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}

@@ -7,7 +7,7 @@ export type User = {
   email: string;
   phone?: string;
   address?: string;
-  role?: 'customer' | 'admin'; // Add role field
+  role?: 'customer' | 'admin';
 };
 
 type AuthContextType = {
@@ -83,6 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Login response data:', data); // Debug log
+        console.log('User role:', data.user?.role); // Debug log
         setUser(data.user);
         setToken(data.token);
         setIsAuthenticated(true);

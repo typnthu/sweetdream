@@ -1,67 +1,76 @@
-# name: PR Checks
+name: PR Checks
 
-# on:
-#   pull_request:
-#     branches: [master, dev]
+on:
+  pull_request:
+    branches: [master, dev]
 
-# jobs:
-#   # Quick validation checks
-#   validate:
-#     name: Quick Validation
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
+jobs:
+  # Quick validation checks
+  validate:
+    name: Quick Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       
-#       - name: Terraform Format
-#         uses: hashicorp/setup-terraform@v3
-#         with:
-#           terraform_version: 1.6.0
+      - name: Terraform Format
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
       
-#       - name: Check Terraform
-#         working-directory: terraform
-#         run: terraform fmt -check -recursive || echo "⚠️ Run 'terraform fmt -recursive' to fix"
-#         continue-on-error: true
+      - name: Check Terraform
+        working-directory: terraform
+        run: terraform fmt -check -recursive || echo "Run 'terraform fmt -recursive' to fix"
+        continue-on-error: true
       
-#       - name: Check for secrets
-#         run: |
-#           if grep -r "aws_access_key_id\|aws_secret_access_key" --exclude-dir=.git --exclude-dir=node_modules .; then
-#             echo "❌ Found potential secrets in code!"
-#             exit 1
-#           fi
-#           echo "✅ No secrets found"
+      - name: Check for secrets
+        run: |
+          # Define patterns to avoid false positives in this file
+          AWS_KEY_PATTERN="aws_access_key_id"
+          AWS_SECRET_PATTERN="aws_secret_access_key"
+          
+          # Exclude this workflow file from the search
+          if grep -r "$AWS_KEY_PATTERN\|$AWS_SECRET_PATTERN" \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude="pr-checks.yml" \
+            .; then
+            echo "Found potential secrets in code!"
+            exit 1
+          fi
+          echo "No secrets found"
 
-#   # Security scan
-#   security:
-#     name: Security Scan
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
+  # Security scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       
-#       - uses: aquasecurity/trivy-action@master
-#         with:
-#           scan-type: 'fs'
-#           scan-ref: '.'
-#           format: 'sarif'
-#           output: 'trivy-results.sarif'
-#         continue-on-error: true
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
       
-#       - uses: github/codeql-action/upload-sarif@v3
-#         with:
-#           sarif_file: 'trivy-results.sarif'
-#         continue-on-error: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
 
-#   # Summary
-#   summary:
-#     name: Summary
-#     needs: [validate, security]
-#     if: always()
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: PR Summary
-#         run: |
-#           echo "## PR Checks Summary" >> $GITHUB_STEP_SUMMARY
-#           echo "" >> $GITHUB_STEP_SUMMARY
-#           echo "- **Validation**: ${{ needs.validate.result }}" >> $GITHUB_STEP_SUMMARY
-#           echo "- **Security**: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
-#           echo "" >> $GITHUB_STEP_SUMMARY
-#           echo "Full CI checks will run on push to main/dev branches." >> $GITHUB_STEP_SUMMARY
+  # Summary
+  summary:
+    name: Summary
+    needs: [validate, security]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR Summary
+        run: |
+          echo "## PR Checks Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Validation**: ${{ needs.validate.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Security**: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full CI checks will run on push to main/dev branches." >> $GITHUB_STEP_SUMMARY

@@ -12,6 +12,17 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+# Security Group Rule for PostgreSQL Access
+resource "aws_security_group_rule" "postgres_access" {
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = var.ecs_security_group_id
+  security_group_id        = var.ecs_security_group_id
+  description              = "Allow PostgreSQL access from ECS tasks"
+}
+
 # RDS PostgreSQL Instance
 resource "aws_db_instance" "postgres" {
   identifier            = "sweetdream-db"
@@ -28,7 +39,7 @@ resource "aws_db_instance" "postgres" {
   password = var.db_password
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [var.ecs_security_group_id]
+  vpc_security_group_ids = [var.rds_security_group_id != null ? var.rds_security_group_id : var.ecs_security_group_id]
 
   backup_retention_period = 7
   backup_window           = "03:00-04:00"
@@ -43,6 +54,8 @@ resource "aws_db_instance" "postgres" {
     Name        = "SweetDream PostgreSQL"
     Environment = "production"
   }
+
+  depends_on = [aws_security_group_rule.postgres_access]
 
   lifecycle {
     create_before_destroy = true

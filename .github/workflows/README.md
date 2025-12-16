@@ -2,21 +2,21 @@
 
 Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform.
 
-## 🔄 Workflows
+## Workflows
 
 ### 1. CI (`ci.yml`)
 **Triggers**: Push/PR to master/dev branches  
 **Purpose**: Continuous Integration - builds, tests, and validates code
 
 **Features**:
-- ✅ Smart change detection - only runs jobs for changed components
-- ✅ Parallel execution for faster builds
-- ✅ npm dependency caching
-- ✅ PostgreSQL test database for backend tests
-- ✅ TypeScript type checking
-- ✅ Linting and code quality checks
-- ✅ Security audits (npm audit)
-- ✅ Terraform validation
+- Smart change detection - only runs jobs for changed components
+- Parallel execution for faster builds
+- npm dependency caching
+- PostgreSQL test database for backend tests
+- TypeScript type checking
+- Linting and code quality checks
+- Security audits (npm audit)
+- Terraform validation
 
 **Components Tested**:
 - Backend (with PostgreSQL integration tests)
@@ -31,20 +31,26 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 
 ### 2. Deploy to AWS (`deploy.yml`)
 **Triggers**: 
-- Push to master/dev branches (automatic)
+- CI workflow completion (automatic, only on success)
 - Manual dispatch with options
 
 **Purpose**: Automated deployment to AWS ECS with zero-downtime
 
+**Dependencies**: Only runs after CI workflow completes successfully
+
+**Branch Strategy**:
+- `main` branch → Production environment (us-west-2)
+- `dev` branch → Development environment (us-east-1)
+
 **Features**:
-- ✅ Smart change detection - only deploys modified services
-- ✅ Matrix strategy for parallel service deployment
-- ✅ Infrastructure-first deployment (Terraform)
-- ✅ Docker image tagging with commit SHA + latest
-- ✅ ECS service health checks and wait for stability
-- ✅ Environment-specific deployments (production/development)
-- ✅ Force deploy option (manual trigger)
-- ✅ Comprehensive deployment summary with service statuses
+- Smart change detection - only deploys modified services
+- Matrix strategy for parallel service deployment
+- Infrastructure-first deployment (Terraform)
+- Docker image tagging with commit SHA + latest
+- ECS service health checks and wait for stability
+- Environment-specific deployments (production/development)
+- Force deploy option (manual trigger)
+- Comprehensive deployment summary with service statuses
 
 **Deployment Flow**:
 1. **Detect Changes** - Identify modified services
@@ -65,11 +71,11 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 **Purpose**: Fast validation before merge
 
 **Features**:
-- ✅ Terraform format validation
-- ✅ Secret detection (prevents credential leaks)
-- ✅ Security scanning with Trivy
-- ✅ SARIF upload to GitHub Security tab
-- ✅ Fast execution (< 2 minutes)
+- Terraform format validation
+- Secret detection (prevents credential leaks)
+- Security scanning with Trivy
+- SARIF upload to GitHub Security tab
+- Fast execution (< 2 minutes)
 
 **Checks**:
 - Terraform formatting
@@ -80,7 +86,7 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 
 ---
 
-## 📊 Pipeline Architecture
+## Pipeline Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -96,7 +102,7 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 └───────────────┘         └──────┬───────┘
                                  │
                     ┌────────────┴────────────┐
-                    │   Push to master/dev      │
+                    │   CI Success Required     │
                     └────────────┬────────────┘
                                  │
                                  ▼
@@ -110,7 +116,7 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 
 ---
 
-## 🚀 Usage Examples
+## Usage Examples
 
 ### Automatic Deployment
 ```bash
@@ -118,11 +124,13 @@ Complete, production-ready CI/CD pipeline for the SweetDream e-commerce platform
 git push origin main
 
 # Pipeline automatically:
-# 1. Detects changes
-# 2. Deploys infrastructure (if Terraform changed)
-# 3. Builds & deploys only changed services
-# 4. Waits for services to stabilize
-# 5. Shows deployment summary
+# 1. Runs CI tests and validation
+# 2. On CI success, triggers deployment
+# 3. Detects changes
+# 4. Deploys infrastructure (if Terraform changed)
+# 5. Builds & deploys only changed services
+# 6. Waits for services to stabilize
+# 7. Shows deployment summary
 ```
 
 ### Manual Deployment
@@ -155,7 +163,7 @@ git push origin main
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Required GitHub Secrets
 
@@ -163,11 +171,11 @@ Navigate to: **Settings → Secrets and variables → Actions → Secrets tab**
 
 | Secret | Description | Required | Default if not set |
 |--------|-------------|----------|-------------------|
-| `AWS_ACCESS_KEY_ID` | AWS IAM access key | ✅ Yes | - |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key | ✅ Yes | - |
-| `DB_PASSWORD` | RDS PostgreSQL password | ✅ Yes | - |
-| `DB_USERNAME` | RDS PostgreSQL username | ⬜ Optional | `postgres` |
-| `ALERT_EMAIL` | CloudWatch alerts email | ⬜ Optional | `admin@example.com` |
+| `AWS_ACCESS_KEY_ID` | AWS IAM access key | Yes | - |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key | Yes | - |
+| `DB_PASSWORD` | RDS PostgreSQL password | Yes | - |
+| `DB_USERNAME` | RDS PostgreSQL username | Optional | `postgres` |
+| `ALERT_EMAIL` | CloudWatch alerts email | Optional | `admin@example.com` |
 
 ### Optional GitHub Variables (Non-Sensitive Config)
 
@@ -186,16 +194,18 @@ Navigate to: **Settings → Secrets and variables → Actions → Variables tab*
 Create environments: **Settings → Environments**
 
 1. **production**
-   - Protection rules: Require approval
-   - Deployment branches: master only
+   - Protection rules: Require approval (recommended)
+   - Deployment branches: main only
+   - AWS Region: us-west-2
 
 2. **development**
    - Protection rules: None
-   - Deployment branches: master, dev
+   - Deployment branches: main, dev
+   - AWS Region: us-east-1
 
 ---
 
-## 📈 Performance Metrics
+## Performance Metrics
 
 | Workflow | Duration | Optimization |
 |----------|----------|--------------|
@@ -208,12 +218,12 @@ Create environments: **Settings → Environments**
 
 ---
 
-## 🎯 Best Practices
+## Best Practices
 
 ### 1. **Branch Strategy**
-- `main` → Production deployments
-- `dev` → Development deployments
-- Feature branches → PR checks only
+- `main` → Production deployments (us-west-2)
+- `dev` → Development deployments (us-east-1)
+- Feature branches → PR checks only (no deployment)
 
 ### 2. **Commit Messages**
 Use conventional commits for clarity:
@@ -244,7 +254,7 @@ Pipeline automatically detects changes in:
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Deployment Fails
 ```bash
@@ -277,7 +287,7 @@ aws ecs describe-tasks \
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [AWS ECS Best Practices](https://docs.aws.amazon.com/AmazonECS/latest/bestpracticesguide/)

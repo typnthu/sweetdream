@@ -1,6 +1,9 @@
 # ===== Stage 1: Builder =====
 FROM node:20-alpine AS builder
 
+# Install openssl for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy package files first (to leverage Docker caching)
@@ -39,9 +42,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/package*.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
-COPY --chown=nextjs:nodejs startup.sh ./startup.sh
 
-RUN chmod +x startup.sh
+# Copy startup script and ensure it has Unix line endings and execute permissions
+COPY --chown=nextjs:nodejs startup.sh ./startup.sh
+RUN chmod +x startup.sh && \
+    sed -i 's/\r$//' startup.sh
 
 USER nextjs
 

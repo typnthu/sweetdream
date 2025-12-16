@@ -31,22 +31,26 @@ export default function Home() {
   }, []);
 
   // Chọn sản phẩm hot / new dựa theo id
-  const hotProducts = products.slice(0, 4); // 4 sản phẩm đầu
-  const newProducts = products.slice(-4);   // 4 sản phẩm cuối
+  const hotProducts = products.slice(-4); // 4 sản phẩm cuối
+  const newProducts = products.slice(0,4);   // 4 sản phẩm đầu
 
   return (
     <div>
       {/* Banner - Full Width, Clickable */}
       <Link href="/about" className="block cursor-pointer group">
-        <div className="relative w-full md:h-[350px] overflow-hidden  shadow-[0_15px_15px_rgba(248,166,210,0.4)]">
+        <div className="relative w-full md:h-[350px] overflow-hidden shadow-[0_15px_15px_rgba(248,166,210,0.4)]">
           <Image
             src="/banner.png"
-            alt="Banner SweetDream - Click để tìm hiểu thêm"
+            alt="Banner SweetDream - Click để tìm hiểu thêm về sản phẩm"
             fill
-            className="object-cover object-center transition-transform duration-500 "
+            className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
             priority
           />
+          {/* Test deployment indicator */}
+          <div className="absolute bottom-2 right-2 bg-pink-500 text-white px-2 py-1 rounded text-xs opacity-75">
+            v2024.12.17
           </div>
+        </div>
       </Link>
 
       {/* Products Section */}

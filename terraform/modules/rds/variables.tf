@@ -29,3 +29,9 @@ variable "ecs_security_group_id" {
   description = "Security group ID for ECS tasks"
   type        = string
 }
+
+variable "rds_security_group_id" {
+  description = "Security group ID for RDS database"
+  type        = string
+  default     = null
+}

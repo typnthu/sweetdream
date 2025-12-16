@@ -2,6 +2,10 @@
 resource "aws_s3_bucket" "logs" {
   bucket = var.bucket_name
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   tags = {
     Name        = "SweetDream Logs and Data"
     Environment = "production"
@@ -58,3 +62,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
     }
   }
 }
+
+
+

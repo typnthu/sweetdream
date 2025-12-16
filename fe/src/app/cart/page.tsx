@@ -8,6 +8,45 @@ import { useRouter } from "next/navigation";
 import AuthGuard from "@/components/AuthGuard";
 import { formatPrice } from "@/lib/formatPrice";
 
+interface OrderItem {
+  id: number;
+  name: string;
+  price: number;
+  quantity: number;
+  img: string;
+  originalProductId: number;
+}
+
+interface OrderData {
+  id: number;
+  orderNumber: string;
+  date: string;
+  status: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+  };
+  items: OrderItem[];
+  total: number;
+  shipping: number;
+  finalTotal: number;
+  estimatedDelivery: string;
+}
+
+interface ApiOrderItem {
+  id: number;
+  price: string;
+  quantity: number;
+  productId: number;
+  product: {
+    name: string;
+    img: string;
+  };
+  size: string;
+}
+
 export default function Cart() {
   const { cart, removeFromCart, clearCart, updateQuantity } = useCart();
   const { user } = useAuth();
@@ -19,7 +58,7 @@ export default function Cart() {
     address: user?.address || ""
   });
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [orderData, setOrderData] = useState<any>(null);
+  const [orderData, setOrderData] = useState<OrderData | null>(null);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const shipping = 30000; // Phí vận chuyển cố định
@@ -79,7 +118,7 @@ export default function Cart() {
         date: new Date(createdOrder.createdAt).toLocaleDateString('vi-VN'),
         status: createdOrder.status,
         customer: createdOrder.customer,
-        items: createdOrder.items.map((item: any) => ({
+        items: createdOrder.items.map((item: ApiOrderItem) => ({
           id: item.id,
           name: `${item.product.name} - ${item.size}`,
           price: Number(item.price),
@@ -89,6 +128,7 @@ export default function Cart() {
         })),
         total: Number(createdOrder.total),
         shipping: Number(createdOrder.shipping),
+        finalTotal: Number(createdOrder.total) + Number(createdOrder.shipping),
         estimatedDelivery: new Date(Date.now() + 4 * 60 * 60 * 1000).toLocaleString('vi-VN')
       });
       setShowSuccessModal(true);

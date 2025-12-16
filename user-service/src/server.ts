@@ -7,12 +7,39 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Joi from 'joi';
+import { requestLogger } from './middleware/requestLogger';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3003;
-const prisma = new PrismaClient();
+
+// Enhanced Prisma client with query logging
+const prisma = new PrismaClient({
+  log: [
+    { level: 'query', emit: 'event' },
+    { level: 'error', emit: 'event' },
+    { level: 'info', emit: 'event' },
+    { level: 'warn', emit: 'event' },
+  ],
+});
+
+// Prisma query logging
+prisma.$on('query', (e) => {
+  console.log(`[UserService:DB]  QUERY`, {
+    query: e.query,
+    params: e.params,
+    duration: `${e.duration}ms`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+prisma.$on('error', (e) => {
+  console.error(`[UserService:DB] DATABASE ERROR`, {
+    message: e.message,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Middleware
 app.use(helmet());
@@ -23,6 +50,9 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Enhanced request logging
+app.use(requestLogger);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -150,7 +180,6 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
     }
-    // If no password stored (legacy users), accept any password for backward compatibility
 
     // Generate JWT token with role (lowercase for frontend compatibility)
     const token = jwt.sign(
@@ -462,8 +491,50 @@ process.on('SIGTERM', async () => {
 });
 
 app.listen(port, () => {
-  console.log(`🔐 User Service running on port ${port}`);
-  console.log(`📊 Health check: http://localhost:${port}/health`);
+  console.log(`[UserService]  SERVICE STARTED`, {
+    service: 'user-service',
+    port,
+    environment: process.env.NODE_ENV || 'development',
+    healthCheck: `http://localhost:${port}/health`,
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    platform: process.platform,
+    memory: process.memoryUsage()
+  });
 });
 
 export default app;
+// Enhanced Error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const requestId = req.headers['x-request-id'] || 'unknown';
+  
+  console.error(`[UserService:${requestId}] UNHANDLED ERROR`, {
+    service: 'user-service',
+    requestId,
+    error: err.message,
+    stack: err.stack,
+    method: req.method,
+    url: req.url,
+    body: req.body,
+    query: req.query,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    timestamp: new Date().toISOString()
+  });
+  
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Internal server error' 
+      : err.message,
+    service: 'user-service',
+    requestId,
+    timestamp: new Date().toISOString(),
+    ...(process.env.NODE_ENV !== 'production' && { 
+      stack: err.stack,
+      details: {
+        method: req.method,
+        url: req.url
+      }
+    })
+  });
+});

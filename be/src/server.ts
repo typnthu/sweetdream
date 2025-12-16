@@ -20,8 +20,32 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Initialize Prisma Client
-export const prisma = new PrismaClient();
+// Enhanced Prisma Client with query logging
+export const prisma = new PrismaClient({
+  log: [
+    { level: 'query', emit: 'event' },
+    { level: 'error', emit: 'event' },
+    { level: 'info', emit: 'event' },
+    { level: 'warn', emit: 'event' },
+  ],
+});
+
+// Prisma query logging
+prisma.$on('query', (e) => {
+  console.log(`[Backend:DB] QUERY`, {
+    query: e.query,
+    params: e.params,
+    duration: `${e.duration}ms`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+prisma.$on('error', (e) => {
+  console.error(`[Backend:DB] DATABASE ERROR`, {
+    message: e.message,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Middleware
 app.use(helmet());
@@ -135,15 +159,36 @@ app.use('*', (req, res) => {
   });
 });
 
-// Error handler
+// Enhanced Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
+  const requestId = req.headers['x-request-id'] || 'unknown';
+  
+  console.error(`[Backend:${requestId}] UNHANDLED ERROR`, {
+    requestId,
+    error: err.message,
+    stack: err.stack,
+    method: req.method,
+    url: req.url,
+    body: req.body,
+    query: req.query,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    timestamp: new Date().toISOString()
+  });
   
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' 
       ? 'Internal server error' 
       : err.message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+    requestId,
+    timestamp: new Date().toISOString(),
+    ...(process.env.NODE_ENV !== 'production' && { 
+      stack: err.stack,
+      details: {
+        method: req.method,
+        url: req.url
+      }
+    })
   });
 });
 
@@ -167,9 +212,9 @@ app.listen(port, () => {
     service: 'sweetdream-backend'
   });
   
-  console.log(`🚀 Server running on port ${port}`);
-  console.log(`📊 Health check: http://localhost:${port}/health`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Server running on port ${port}`);
+  console.log(`Health check: http://localhost:${port}/health`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 export default app;
