@@ -600,9 +600,9 @@ aws ecs list-tasks --cluster sweetdream-cluster --service-name sweetdream-servic
 ### Database Access
 
 ```bash
-# Enable bastion host
+# Enable bastion host (optional, disabled by default)
 # Edit terraform/terraform.tfvars:
-enable_bastion = true
+enable_bastion = false
 
 # Apply changes
 cd terraform && terraform apply

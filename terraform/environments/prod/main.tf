@@ -1,50 +1,70 @@
-#main.tf
-# Analytics enabled via GitHub variables
+t# Production Environment - US-East-1
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "sweetdream-terraform-state-prod"
+    key    = "prod/terraform.tfstate"
+    region = "us-west-2"
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  
+  default_tags {
+    tags = {
+      Environment = "production"
+      Project     = "SweetDream"
+      ManagedBy   = "Terraform"
+      Region      = var.aws_region
+    }
+  }
+}
 
 # ===== ECR Repositories (must be created first) =====
 module "ecr" {
-  source      = "./modules/ecr"
+  source      = "../../modules/ecr"
   environment = var.environment
 }
 
 module "vpc" {
-  source     = "./modules/vpc"
+  source     = "../../modules/vpc"
   vpc_cidr   = var.vpc_cidr
   aws_region = var.aws_region
 }
 
 module "iam" {
-  source = "./modules/iam"
+  source = "../../modules/iam"
 }
 
 module "s3" {
-  source      = "./modules/s3"
+  source      = "../../modules/s3"
   bucket_name = var.s3_bucket_name
 }
 
 module "service_discovery" {
-  source         = "./modules/service-discovery"
+  source         = "../../modules/service-discovery"
   namespace_name = "sweetdream.local"
   vpc_id         = module.vpc.vpc_id
 }
 
 module "alb" {
-  source                = "./modules/alb"
+  source                = "../../modules/alb"
   vpc_id                = module.vpc.vpc_id
   public_subnet_ids     = module.vpc.public_subnets
   ecs_security_group_id = module.vpc.ecs_security_group_id
-
-  # Blue/Green deployment weights (20-40-40 split)
-  frontend_blue_weight       = 20
-  frontend_green_weight      = 40
-  user_service_blue_weight   = 20
-  user_service_green_weight  = 40
-  order_service_blue_weight  = 20
-  order_service_green_weight = 40
+  acm_certificate_arn   = var.acm_certificate_arn
 }
 
 module "secrets_manager" {
-  source      = "./modules/secrets-manager"
+  source      = "../../modules/secrets-manager"
   app_name    = "sweetdream"
   secret_name = "sweetdream-db-secret"
   db_username = var.db_username
@@ -52,7 +72,7 @@ module "secrets_manager" {
 }
 
 module "rds" {
-  source                = "./modules/rds"
+  source                = "../../modules/rds"
   db_name               = var.db_name
   db_username           = var.db_username
   db_password           = var.db_password
@@ -89,7 +109,7 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 
 # ===== Backend Service (Products & Categories) =====
 module "ecs_backend" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -106,10 +126,10 @@ module "ecs_backend" {
 
   # Scaling Configuration
   desired_count = 2
-  min_capacity  = 1
-  max_capacity  = 4
-  task_cpu      = 256
-  task_memory   = 512
+  min_capacity  = 2
+  max_capacity  = 10
+  task_cpu      = 512
+  task_memory   = 1024
 
   # Network Configuration
   private_subnet_ids    = module.vpc.private_subnets
@@ -135,36 +155,14 @@ module "ecs_backend" {
   # S3 Bucket
   s3_bucket = module.s3.bucket_name
 
-  # CloudWatch Logs & Analytics
-  environment              = var.environment
-  log_retention_days       = var.log_retention_days
-  enable_analytics_queries = var.enable_customer_analytics
-}
-
-# ===== Backend Analytics (Export to S3) =====
-module "backend_analytics" {
-  count  = var.enable_customer_analytics ? 1 : 0
-  source = "./modules/cloudwatch-analytics"
-
-  service_name          = "${var.service_name}-backend"
-  log_group_name        = "/ecs/sweetdream-${var.service_name}-backend"
-  analytics_bucket_name = "${var.analytics_bucket_prefix}-backend-${var.environment}"
-  export_format         = "json" # json or csv
-  enable_lambda_export  = true   # Enable Lambda for automated exports
-
-  # Filter only user action logs (optional - remove to export all logs)
-  filter_pattern = ""
-
-  tags = {
-    Environment = var.environment
-    Service     = "backend"
-    Purpose     = "Customer Analytics"
-  }
+  # CloudWatch Logs
+  environment        = var.environment
+  log_retention_days = var.log_retention_days
 }
 
 # ===== User Service (Customers & Authentication) =====
 module "ecs_user_service" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -181,10 +179,10 @@ module "ecs_user_service" {
 
   # Scaling Configuration
   desired_count = 2
-  min_capacity  = 1
-  max_capacity  = 4
-  task_cpu      = 256
-  task_memory   = 512
+  min_capacity  = 2
+  max_capacity  = 10
+  task_cpu      = 512
+  task_memory   = 1024
 
   # Network Configuration
   private_subnet_ids    = module.vpc.private_subnets
@@ -213,7 +211,7 @@ module "ecs_user_service" {
 
 # ===== Order Service (Order Processing) =====
 module "ecs_order_service" {
-  source = "./modules/ecs"
+  source = "../../modules/ecs"
 
   # Cluster Configuration
   cluster_id   = aws_ecs_cluster.main.id
@@ -230,10 +228,10 @@ module "ecs_order_service" {
 
   # Scaling Configuration
   desired_count = 2
-  min_capacity  = 1
-  max_capacity  = 4
-  task_cpu      = 256
-  task_memory   = 512
+  min_capacity  = 2
+  max_capacity  = 10
+  task_cpu      = 512
+  task_memory   = 1024
 
   # Network Configuration
   private_subnet_ids    = module.vpc.private_subnets
@@ -263,29 +261,89 @@ module "ecs_order_service" {
   user_service_url = "http://${module.service_discovery.user_service_dns_name}:3003"
 }
 
-# ===== Frontend Service (Next.js Application) =====
-module "ecs_frontend" {
-  source = "./modules/ecs"
+# ===== Frontend CloudWatch Log Group =====
+resource "aws_cloudwatch_log_group" "frontend" {
+  name              = "/ecs/sweetdream-frontend"
+  retention_in_days = var.log_retention_days
 
-  # Cluster Configuration
-  cluster_id   = aws_ecs_cluster.main.id
-  cluster_name = aws_ecs_cluster.main.name
+  tags = {
+    Name        = "SweetDream Frontend Logs"
+    Environment = var.environment
+  }
+}
+
+# ===== Frontend Task Definition for CodeDeploy =====
+resource "aws_ecs_task_definition" "frontend" {
+  family                   = "${var.task_name}-frontend"
+  execution_role_arn       = module.iam.ecs_execution_role_arn
+  task_role_arn            = module.iam.ecs_task_role_arn
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = "512"
+  memory                   = "1024"
+
+  container_definitions = jsonencode([{
+    name      = "sweetdream-frontend"
+    image     = local.frontend_image
+    essential = true
+
+    portMappings = [{
+      containerPort = 3000
+      protocol      = "tcp"
+    }]
+
+    environment = [
+      {
+        name  = "NEXT_PUBLIC_API_URL"
+        value = "/api/proxy"
+      },
+      {
+        name  = "BACKEND_API_URL"
+        value = "http://${module.service_discovery.backend_dns_name}:3001"
+      },
+      {
+        name  = "USER_SERVICE_URL"
+        value = "http://${module.service_discovery.user_service_dns_name}:3003"
+      },
+      {
+        name  = "ORDER_SERVICE_URL"
+        value = "http://${module.service_discovery.order_service_dns_name}:3002"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = "/ecs/sweetdream-frontend"
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+
+  tags = {
+    Name = "SweetDream Frontend Task Definition"
+  }
+}
+
+# ===== Frontend Service (CodeDeploy Blue/Green) =====
+module "ecs_frontend_codedeploy" {
+  source = "../../modules/ecs-codedeploy-blue-green"
 
   # Service Configuration
-  task_name      = "${var.task_name}-frontend"
-  service_name   = "${var.service_name}-frontend"
-  container_name = "sweetdream-frontend"
-  container_port = 3000
+  service_name        = "${var.service_name}-frontend"
+  cluster_name        = aws_ecs_cluster.main.name
+  cluster_id          = aws_ecs_cluster.main.id
+  task_definition_arn = aws_ecs_task_definition.frontend.arn
+  container_name      = "sweetdream-frontend"
+  container_port      = 3000
 
-  # Container Image (dynamically from ECR)
-  container_image = local.frontend_image
+  # Target Groups
+  target_group_blue_arn  = module.alb.frontend_blue_target_group_arn
+  target_group_green_arn = module.alb.frontend_green_target_group_arn
 
-  # Scaling Configuration (Frontend needs more resources)
-  desired_count = 2
-  min_capacity  = 1
-  max_capacity  = 6
-  task_cpu      = 512
-  task_memory   = 1024
+  # CodeDeploy Role
+  codedeploy_role_arn = module.iam.codedeploy_ecs_role_arn
 
   # Network Configuration
   private_subnet_ids    = module.vpc.private_subnets
@@ -295,79 +353,24 @@ module "ecs_frontend" {
   execution_role_arn = module.iam.ecs_execution_role_arn
   task_role_arn      = module.iam.ecs_task_role_arn
 
-  # Load Balancer (Frontend is exposed via ALB)
-  enable_load_balancer = true
-  target_group_arn     = module.alb.frontend_target_group_arn
-
-
-  # Service Discovery (Frontend doesn't need it, uses ALB)
-  enable_service_discovery = false
-
-  # Database Configuration (Frontend doesn't need DB)
-  db_host     = ""
-  db_name     = ""
-  db_username = ""
-  db_password = ""
-
-  # S3 Bucket (not used by frontend)
-  s3_bucket = ""
-
-  # Service-to-Service Communication URLs
-  backend_url       = "http://${module.service_discovery.backend_dns_name}:3001"
-  user_service_url  = "http://${module.service_discovery.user_service_dns_name}:3003"
-  order_service_url = "http://${module.service_discovery.order_service_dns_name}:3002"
-
-  # CloudWatch Logs & Analytics
-  environment              = var.environment
-  log_retention_days       = var.log_retention_days
-  enable_analytics_queries = var.enable_customer_analytics
+  # Configuration
+  desired_count = 2
+  task_cpu      = 512
+  task_memory   = 1024
+  environment   = var.environment
 }
 
-# ===== Order Service Analytics (Export to S3) =====
-module "order_analytics" {
-  count  = var.enable_customer_analytics ? 1 : 0
-  source = "./modules/cloudwatch-analytics"
+# Local values
+locals {
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.name
 
-  service_name          = "${var.service_name}-order-service"
-  log_group_name        = "/ecs/sweetdream-${var.service_name}-order-service"
-  analytics_bucket_name = "${var.analytics_bucket_prefix}-order-${var.environment}"
-  export_format         = "json" # json or csv
-  enable_lambda_export  = true   # Enable Lambda for automated exports
-
-  # Filter only user action logs (optional)
-  filter_pattern = ""
-
-  tags = {
-    Environment = var.environment
-    Service     = "order-service"
-    Purpose     = "Customer Analytics"
-  }
+  # ECR image URIs (from ECR module)
+  backend_image       = "${module.ecr.backend_repository_url}:latest"
+  frontend_image      = "${module.ecr.frontend_repository_url}:latest"
+  user_service_image  = "${module.ecr.user_service_repository_url}:latest"
+  order_service_image = "${module.ecr.order_service_repository_url}:latest"
 }
 
-# ===== Bastion Host (Temporary - for RDS Access) =====
-module "bastion" {
-  count  = var.enable_bastion ? 1 : 0
-  source = "./modules/bastion"
-
-  name_prefix           = var.service_name
-  vpc_id                = module.vpc.vpc_id
-  subnet_id             = module.vpc.private_subnets[0] # Private subnet - access via SSM
-  rds_security_group_id = module.vpc.rds_security_group_id
-  instance_type         = "t3.micro"
-
-  # Database connection info
-  db_host     = module.rds.db_address
-  db_name     = var.db_name
-  db_username = var.db_username
-
-  # Optional: Create EIP for consistent public IP
-  create_eip = false # No EIP needed with SSM
-
-  # Optional: SSH key pair (if you want SSH access)
-  create_key_pair = false
-
-  tags = {
-    Environment = var.environment
-    Purpose     = "Database Access"
-  }
-}
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
