@@ -145,9 +145,7 @@ jobs:
             -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
             -var="s3_bucket_name=${{ vars.S3_BUCKET_NAME }}" \
             -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
-            -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
             -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
-            -var="analytics_bucket_prefix=${{ vars.ANALYTICS_BUCKET_PREFIX || 'sweetdream-analytics' }}" \
             -out=tfplan
       
       - name: Terraform Apply
@@ -299,9 +297,7 @@ jobs:
             -var="db_username=${{ secrets.DB_USERNAME || 'postgres' }}" \
             -var="s3_bucket_name=${{ vars.S3_BUCKET_NAME }}" \
             -var="alert_email=${{ secrets.ALERT_EMAIL || 'admin@example.com' }}" \
-            -var="enable_customer_analytics=${{ vars.ENABLE_ANALYTICS || 'false' }}" \
-            -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}" \
-            -var="analytics_bucket_prefix=${{ vars.ANALYTICS_BUCKET_PREFIX || 'sweetdream-analytics' }}"
+            -var="log_retention_days=${{ vars.LOG_RETENTION_DAYS || '7' }}"
           
           echo "Task definitions updated with new ECR images" >> $GITHUB_STEP_SUMMARY
 
