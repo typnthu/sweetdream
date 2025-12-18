@@ -21,7 +21,7 @@ variable "vpc_cidr" {
 variable "cluster_name" {
   description = "ECS cluster name"
   type        = string
-  default     = "sweetdream-prod-cluster"
+  default     = "sweetdream-cluster"
 }
 
 variable "task_name" {
