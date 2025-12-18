@@ -43,7 +43,7 @@ export default function Home() {
             src="/banner.png"
             alt="Banner SweetDream - Click để tìm hiểu thêm về sản phẩm"
             fill
-            className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+            className="object-cover object-center transition-transform duration-500 group-hover:scale-110"
             priority
           />
           {/* Test deployment indicator */}

@@ -20,7 +20,6 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECS_CLUSTER: sweetdream-cluster
   TERRAFORM_VERSION: '1.6.0'
 
 permissions:
@@ -343,13 +342,20 @@ jobs:
       - name: Deploy to ECS
         if: steps.check.outputs.deploy == 'true'
         run: |
-          SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
+          # Determine service name based on environment
+          if [[ "${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" == "production" ]]; then
+            SERVICE_NAME="sweetdream-prod-service-${{ matrix.service.name }}"
+          else
+            SERVICE_NAME="sweetdream-dev-service-${{ matrix.service.name }}"
+          fi
+          
+          CLUSTER_NAME="${{ vars.CLUSTER_NAME || 'sweetdream-cluster' }}"
           
           echo "Checking if $SERVICE_NAME exists..."
           
           # Check if service exists and is active
           SERVICE_STATUS=$(aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
+            --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
             --query 'services[0].status' \
             --output text 2>/dev/null || echo "NOT_FOUND")
@@ -357,7 +363,7 @@ jobs:
           if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
             echo "Service exists and is active. Deploying $SERVICE_NAME..."
             aws ecs update-service \
-              --cluster ${{ env.ECS_CLUSTER }} \
+              --cluster $CLUSTER_NAME \
               --service $SERVICE_NAME \
               --force-new-deployment \
               --no-cli-pager
@@ -373,11 +379,18 @@ jobs:
       - name: Wait for deployment
         if: steps.check.outputs.deploy == 'true'
         run: |
-          SERVICE_NAME="sweetdream-service-${{ matrix.service.name }}"
+          # Determine service name based on environment
+          if [[ "${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" == "production" ]]; then
+            SERVICE_NAME="sweetdream-prod-service-${{ matrix.service.name }}"
+          else
+            SERVICE_NAME="sweetdream-dev-service-${{ matrix.service.name }}"
+          fi
+          
+          CLUSTER_NAME="${{ vars.CLUSTER_NAME || 'sweetdream-cluster' }}"
           
           # Check if service exists before waiting
           SERVICE_STATUS=$(aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
+            --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
             --query 'services[0].status' \
             --output text 2>/dev/null || echo "NOT_FOUND")
@@ -385,7 +398,7 @@ jobs:
           if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
             echo "Waiting for $SERVICE_NAME to stabilize..."
             aws ecs wait services-stable \
-              --cluster ${{ env.ECS_CLUSTER }} \
+              --cluster $CLUSTER_NAME \
               --services $SERVICE_NAME \
               --no-cli-pager
             echo "$SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
@@ -488,11 +501,20 @@ jobs:
           echo "alb_url=$ALB_URL" >> $GITHUB_OUTPUT
           
           # Get service statuses
+          CLUSTER_NAME="${{ vars.CLUSTER_NAME || 'sweetdream-cluster' }}"
+          
+          # Determine service prefix based on environment
+          if [[ "${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" == "production" ]]; then
+            SERVICE_PREFIX="sweetdream-prod-service"
+          else
+            SERVICE_PREFIX="sweetdream-dev-service"
+          fi
+          
           SERVICES=("backend" "frontend" "order-service" "user-service")
           for service in "${SERVICES[@]}"; do
             STATUS=$(aws ecs describe-services \
-              --cluster ${{ env.ECS_CLUSTER }} \
-              --services sweetdream-service-$service \
+              --cluster $CLUSTER_NAME \
+              --services $SERVICE_PREFIX-$service \
               --query 'services[0].deployments[0].rolloutState' \
               --output text 2>/dev/null || echo "NOT_FOUND")
             echo "${service}_status=$STATUS" >> $GITHUB_OUTPUT
