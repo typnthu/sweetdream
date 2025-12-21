@@ -179,17 +179,6 @@ module "ecs_backend" {
   aws_region         = var.aws_region
 }
 
-# ===== User Service CloudWatch Log Group =====
-resource "aws_cloudwatch_log_group" "user_service" {
-  name              = "/ecs/sweetdream-user-service"
-  retention_in_days = var.log_retention_days
-
-  tags = {
-    Name        = "SweetDream User Service Logs"
-    Environment = var.environment
-  }
-}
-
 # ===== User Service (Rolling Update) =====
 module "ecs_user_service" {
   source = "../../modules/ecs"
@@ -245,17 +234,6 @@ module "ecs_user_service" {
   aws_region         = var.aws_region
 }
 
-# ===== Order Service CloudWatch Log Group =====
-resource "aws_cloudwatch_log_group" "order_service" {
-  name              = "/ecs/sweetdream-order-service"
-  retention_in_days = var.log_retention_days
-
-  tags = {
-    Name        = "SweetDream Order Service Logs"
-    Environment = var.environment
-  }
-}
-
 # ===== Order Service (Rolling Update) =====
 module "ecs_order_service" {
   source = "../../modules/ecs"
@@ -309,17 +287,6 @@ module "ecs_order_service" {
   environment        = var.environment
   log_retention_days = var.log_retention_days
   aws_region         = var.aws_region
-}
-
-# ===== Frontend CloudWatch Log Group =====
-resource "aws_cloudwatch_log_group" "frontend" {
-  name              = "/ecs/sweetdream-frontend"
-  retention_in_days = var.log_retention_days
-
-  tags = {
-    Name        = "SweetDream Frontend Logs"
-    Environment = var.environment
-  }
 }
 
 # ===== Frontend Service (Rolling Update) =====
