@@ -1,0 +1,93 @@
+echo "STEP 1 - Configure AWS profiles"
+aws configure set aws_access_key_id YOUR_DEV_AWS_ACCESS_KEY --profile sweetdev
+aws configure set aws_secret_access_key YOUR_DEV_AWS_SECRET_KEY --profile sweetdev
+aws configure set region us-east-1 --profile sweetdev
+aws configure set aws_access_key_id YOUR_PROD_AWS_ACCESS_KEY --profile sweetprod
+aws configure set aws_secret_access_key YOUR_PROD_AWS_SECRET_KEY --profile sweetprod
+aws configure set region us-west-2 --profile sweetprod
+
+echo "STEP 2 - Create GitHub secrets and variables (replace OWNER/REPO and values)"
+gh secret set AWS_ACCESS_KEY_ID --body "$AWS_ACCESS_KEY_ID" --repo OWNER/REPO
+gh secret set AWS_SECRET_ACCESS_KEY --body "$AWS_SECRET_ACCESS_KEY" --repo OWNER/REPO
+gh secret set AWS_ACCOUNT_ID --body "$AWS_ACCOUNT_ID" --repo OWNER/REPO
+gh secret set ECR_REPOSITORY --body "your-ecr-repo" --repo OWNER/REPO
+gh variable set DEV_REGION --body "us-east-1" --repo OWNER/REPO
+gh variable set PROD_REGION --body "us-west-2" --repo OWNER/REPO
+
+echo "STEP 3 - Create dev branch and make tiny frontend change"
+git checkout -b dev
+if [ -f fe/src/app/layout.tsx ]; then echo "// demo tweak $(date +%s)" >> fe/src/app/layout.tsx; else mkdir -p fe/src/app && echo "// demo tweak $(date +%s)" > fe/src/app/layout.tsx; fi
+git add fe/src/app/layout.tsx
+git commit -m "demo: tiny layout tweak for CI"
+git push -u origin dev
+
+echo "STEP 4 - Trigger and view GitHub Actions (dev)"
+gh run list --repo OWNER/REPO
+LATEST_RUN_ID=$(gh run list --repo OWNER/REPO --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run view $LATEST_RUN_ID --repo OWNER/REPO --log
+
+echo "STEP 5 - Check AWS dev resources (us-east-1)"
+aws --profile sweetdev ecs list-clusters
+aws --profile sweetdev ecs list-services --cluster YOUR_DEV_CLUSTER_NAME
+aws --profile sweetdev ecs describe-services --cluster YOUR_DEV_CLUSTER_NAME --services YOUR_SERVICE_NAME
+aws --profile sweetdev ecs list-tasks --cluster YOUR_DEV_CLUSTER_NAME --service-name YOUR_SERVICE_NAME
+aws --profile sweetdev ecs describe-tasks --cluster YOUR_DEV_CLUSTER_NAME --tasks $(aws --profile sweetdev ecs list-tasks --cluster YOUR_DEV_CLUSTER_NAME --service-name YOUR_SERVICE_NAME --query 'taskArns' --output text)
+aws --profile sweetdev elbv2 describe-load-balancers --query 'LoadBalancers[*].{Name:LoadBalancerName,DNS:DNSName}' --output table
+aws --profile sweetdev logs describe-log-groups --log-group-name-prefix "/ecs" --output table
+aws --profile sweetdev logs tail /ecs/YOUR_LOG_GROUP --since 1h --follow
+
+echo "STEP 6 - Open ALB URL (copy DNS from previous command)"
+echo "http://YOUR_ALB_DNS_NAME/"
+
+echo "STEP 7 - Create PR dev -> master and observe PR checks"
+gh pr create --base master --head dev --title "Demo PR: dev -> master" --body "Demo CI/CD PR"
+gh pr list --repo OWNER/REPO
+gh pr view PR_NUMBER --repo OWNER/REPO --web
+
+echo "STEP 8 - Merge PR (after checks pass)"
+gh pr merge PR_NUMBER --repo OWNER/REPO --merge --delete-branch
+
+echo "STEP 9 - Observe production deploy and CodeDeploy (us-west-2)"
+aws --profile sweetprod deploy list-applications
+aws --profile sweetprod deploy list-deployments --application-name YOUR_CODEDEPLOY_APP_NAME
+aws --profile sweetprod deploy get-deployment --deployment-id YOUR_DEPLOYMENT_ID
+aws --profile sweetprod ecs list-clusters
+aws --profile sweetprod ecs list-services --cluster YOUR_PROD_CLUSTER_NAME
+aws --profile sweetprod ecs describe-services --cluster YOUR_PROD_CLUSTER_NAME --services YOUR_SERVICE_NAME
+aws --profile sweetprod ecs list-tasks --cluster YOUR_PROD_CLUSTER_NAME --service-name YOUR_SERVICE_NAME
+aws --profile sweetprod ecs describe-tasks --cluster YOUR_PROD_CLUSTER_NAME --tasks $(aws --profile sweetprod ecs list-tasks --cluster YOUR_PROD_CLUSTER_NAME --service-name YOUR_SERVICE_NAME --query 'taskArns' --output text)
+aws --profile sweetprod elbv2 describe-target-groups --query 'TargetGroups[*].{Name:TargetGroupName,Arn:TargetGroupArn}' --output table
+aws --profile sweetprod elbv2 describe-load-balancers --query 'LoadBalancers[*].{Name:LoadBalancerName,DNS:DNSName}' --output table
+aws --profile sweetprod logs tail /ecs/YOUR_PROD_LOG_GROUP --since 1h --follow
+
+echo "STEP 10 - Demo auto-scaling: view policies and metrics"
+aws --profile sweetprod application-autoscaling describe-scalable-targets --service-namespace ecs --query 'ScalableTargets[*].{ResourceId:ResourceId,ScalableDimension:ScalableDimension,MinCapacity:MinCapacity,MaxCapacity:MaxCapacity}' --output table
+aws --profile sweetprod application-autoscaling describe-scaling-policies --service-namespace ecs --resource-id service/YOUR_PROD_CLUSTER_NAME/YOUR_SERVICE_NAME --query 'ScalingPolicies[*].{PolicyName:PolicyName,PolicyType:PolicyType}' --output table
+aws --profile sweetprod cloudwatch get-metric-statistics --namespace AWS/ECS --metric-name CPUUtilization --dimensions Name=ClusterName,Value=YOUR_PROD_CLUSTER_NAME Name=ServiceName,Value=YOUR_SERVICE_NAME --start-time $(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ) --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) --period 60 --statistics Average
+
+echo "STEP 11 - Generate load (ab, curl examples)"
+ab -n 1000 -c 50 http://YOUR_ALB_DNS_NAME/api/products
+ab -t 60 -c 100 http://YOUR_ALB_DNS_NAME/api/products
+for i in {1..100}; do curl -s http://YOUR_ALB_DNS_NAME/api/products & done
+for i in {1..50}; do curl -s "http://YOUR_ALB_DNS_NAME/api/products?search=random$i" & done
+
+echo "STEP 12 - If needed: enable and use ECS Exec"
+aws --profile sweetprod ecs update-service --cluster YOUR_PROD_CLUSTER_NAME --service YOUR_SERVICE_NAME --enable-execute-command
+TASK_ARN=$(aws --profile sweetprod ecs list-tasks --cluster YOUR_PROD_CLUSTER_NAME --service-name YOUR_SERVICE_NAME --query 'taskArns[0]' --output text)
+aws --profile sweetprod ecs execute-command --cluster YOUR_PROD_CLUSTER_NAME --task $TASK_ARN --container YOUR_CONTAINER_NAME --interactive --command "/bin/sh"
+
+echo "STEP 13 - Optional: create scheduled scaling via Terraform"
+cd terraform/environments/prod
+terraform init
+terraform plan -out=tfplan
+terraform apply "tfplan"
+cd -
+
+echo "STEP 14 - Tail CloudWatch logs for verification"
+aws --profile sweetprod logs tail /ecs/YOUR_PROD_LOG_GROUP --since 10m --follow
+
+echo "STEP 15 - Cleanup local branch"
+git checkout master
+git branch -D dev
+
+echo "END"
