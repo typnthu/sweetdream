@@ -446,31 +446,22 @@ jobs:
             echo "Service $SERVICE_NAME does not exist. Skipping deployment."
             echo "$SERVICE_NAME: Service not found (may need initial Terraform apply)" >> $GITHUB_STEP_SUMMARY
           elif [ "$DEPLOYMENT_CONTROLLER" = "CODE_DEPLOY" ]; then
-            echo "🔵 Service uses CODE_DEPLOY controller"
+            echo "🔵 Service uses CODE_DEPLOY controller (Blue/Green deployment)"
             echo "Task Definition: $TASK_DEFINITION"
+            echo "Current: Running=$RUNNING_COUNT, Desired=$DESIRED_COUNT"
             
-            # Trigger CodeDeploy deployment
-            APP_NAME="${SERVICE_NAME}-codedeploy"
-            DEPLOYMENT_GROUP="${SERVICE_NAME}-deployment-group"
-            
-            echo "Triggering CodeDeploy deployment..."
-            echo "  Application: $APP_NAME"
-            echo "  Deployment Group: $DEPLOYMENT_GROUP"
-            
-            # Create deployment
-            DEPLOYMENT_ID=$(aws deploy create-deployment \
-              --application-name $APP_NAME \
-              --deployment-group-name $DEPLOYMENT_GROUP \
-              --revision '{"revisionType":"AppSpecContent","appSpecContent":{"content":"{\"version\":0.0,\"Resources\":[{\"TargetService\":{\"Type\":\"AWS::ECS::Service\",\"Properties\":{\"TaskDefinition\":\"'$TASK_DEFINITION'\",\"LoadBalancerInfo\":{\"ContainerName\":\"'${{ matrix.service.name }}'\",\"ContainerPort\":'${{ matrix.service.port }}'},\"PlatformVersion\":\"LATEST\"}}}]}"}}' \
-              --query 'deploymentId' \
-              --output text 2>&1)
-            
-            if [ $? -eq 0 ]; then
-              echo "✅ CodeDeploy deployment created: $DEPLOYMENT_ID"
-              echo "$SERVICE_NAME: CodeDeploy deployment $DEPLOYMENT_ID initiated" >> $GITHUB_STEP_SUMMARY
+            if [ "$DESIRED_COUNT" = "0" ]; then
+              echo "⚡ Initial deployment - scaling service to desired_count=2"
+              aws ecs update-service \
+                --cluster $CLUSTER_NAME \
+                --service $SERVICE_NAME \
+                --desired-count 2 \
+                --task-definition $TASK_DEFINITION \
+                --no-cli-pager
+              echo "$SERVICE_NAME: Scaled to 2 tasks - CodeDeploy will handle Blue/Green deployment" >> $GITHUB_STEP_SUMMARY
             else
-              echo "⚠️ Failed to create CodeDeploy deployment: $DEPLOYMENT_ID"
-              echo "$SERVICE_NAME: CodeDeploy deployment failed - $DEPLOYMENT_ID" >> $GITHUB_STEP_SUMMARY
+              echo "✅ Service already running - CodeDeploy will auto-deploy on task definition change"
+              echo "$SERVICE_NAME: CodeDeploy will handle deployment automatically" >> $GITHUB_STEP_SUMMARY
             fi
           elif [ "$SERVICE_STATUS" = "ACTIVE" ]; then
             echo "Service exists and is active. Deploying $SERVICE_NAME..."
