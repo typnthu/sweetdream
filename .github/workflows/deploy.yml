@@ -427,11 +427,11 @@ jobs:
           
           echo "Checking if $SERVICE_NAME exists..."
           
-          # Get service info directly
+          # Get service info including deployment controller
           SERVICE_INFO=$(aws ecs describe-services \
             --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
-            --query 'services[0].{status:status,runningCount:runningCount,desiredCount:desiredCount}' \
+            --query 'services[0].{status:status,runningCount:runningCount,desiredCount:desiredCount,deploymentController:deploymentController.type}' \
             --output json 2>/dev/null || echo '{"status":"NOT_FOUND"}')
           
           echo "Service info: $SERVICE_INFO"
@@ -439,8 +439,16 @@ jobs:
           SERVICE_STATUS=$(echo $SERVICE_INFO | jq -r '.status // "NOT_FOUND"')
           RUNNING_COUNT=$(echo $SERVICE_INFO | jq -r '.runningCount // 0')
           DESIRED_COUNT=$(echo $SERVICE_INFO | jq -r '.desiredCount // 0')
+          DEPLOYMENT_CONTROLLER=$(echo $SERVICE_INFO | jq -r '.deploymentController // "ECS"')
           
-          if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
+          if [ "$SERVICE_STATUS" = "NOT_FOUND" ] || [ "$SERVICE_STATUS" = "null" ]; then
+            echo "Service $SERVICE_NAME does not exist. Skipping deployment."
+            echo "$SERVICE_NAME: Service not found (may need initial Terraform apply)" >> $GITHUB_STEP_SUMMARY
+          elif [ "$DEPLOYMENT_CONTROLLER" = "CODE_DEPLOY" ]; then
+            echo "⚠️ Service uses CODE_DEPLOY controller - skipping ECS force deployment"
+            echo "Deployment will be handled by CodeDeploy automatically when task definition updates"
+            echo "$SERVICE_NAME: Using CodeDeploy (Blue/Green deployment)" >> $GITHUB_STEP_SUMMARY
+          elif [ "$SERVICE_STATUS" = "ACTIVE" ]; then
             echo "Service exists and is active. Deploying $SERVICE_NAME..."
             echo "Current state: Running=$RUNNING_COUNT, Desired=$DESIRED_COUNT"
             aws ecs update-service \
@@ -449,9 +457,6 @@ jobs:
               --force-new-deployment \
               --no-cli-pager
             echo "$SERVICE_NAME deployment initiated (Running: $RUNNING_COUNT/$DESIRED_COUNT)" >> $GITHUB_STEP_SUMMARY
-          elif [ "$SERVICE_STATUS" = "NOT_FOUND" ] || [ "$SERVICE_STATUS" = "null" ]; then
-            echo "Service $SERVICE_NAME does not exist. Skipping deployment."
-            echo "$SERVICE_NAME: Service not found (may need initial Terraform apply)" >> $GITHUB_STEP_SUMMARY
           else
             echo "Service exists but status is: $SERVICE_STATUS (Running: $RUNNING_COUNT, Desired: $DESIRED_COUNT)"
             echo "Attempting deployment anyway..."
