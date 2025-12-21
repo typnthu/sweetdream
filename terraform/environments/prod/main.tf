@@ -211,13 +211,12 @@ module "ecs_user_service" {
   execution_role_arn = module.iam.ecs_execution_role_arn
   task_role_arn      = module.iam.ecs_task_role_arn
 
-  # Load Balancer
-  enable_load_balancer = true
-  target_group_arn     = module.alb.user_service_blue_target_group_arn
+  # Load Balancer (not exposed via ALB, uses service discovery)
+  enable_load_balancer = false
 
-  # Service Discovery (disabled for ALB services)
-  enable_service_discovery = false
-  service_discovery_arn    = ""
+  # Service Discovery (for internal communication)
+  enable_service_discovery = true
+  service_discovery_arn    = module.service_discovery.user_service_arn
 
   # Database Configuration
   db_host     = module.rds.db_address
@@ -226,7 +225,7 @@ module "ecs_user_service" {
   db_password = var.db_password
 
   # S3 Bucket
-  s3_bucket = module.s3.bucket_name
+  s3_bucket = ""
 
   # CloudWatch Logs
   environment        = var.environment
