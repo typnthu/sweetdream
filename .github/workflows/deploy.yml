@@ -160,10 +160,67 @@ jobs:
             echo "Analytics Lambda functions deployed" >> $GITHUB_STEP_SUMMARY
           fi
 
+  # Check if this is initial deployment (no services exist)
+  check-initial-deployment:
+    name: Check Initial Deployment
+    needs: [deploy-infrastructure]
+    if: |
+      always() && !cancelled() &&
+      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      is_initial: ${{ steps.check.outputs.is_initial }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Check if services exist
+        id: check
+        run: |
+          CLUSTER_NAME="sweetdream-cluster"
+          
+          # Determine service prefix based on environment
+          if [[ "${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" == "production" ]]; then
+            SERVICE_PREFIX="sweetdream-prod-service"
+          else
+            SERVICE_PREFIX="sweetdream-dev-service"
+          fi
+          
+          # Check if any service exists
+          SERVICES=("backend" "frontend" "order-service" "user-service")
+          EXISTING_COUNT=0
+          
+          for service in "${SERVICES[@]}"; do
+            SERVICE_INFO=$(aws ecs describe-services \
+              --cluster $CLUSTER_NAME \
+              --services $SERVICE_PREFIX-$service \
+              --query 'services[0].status' \
+              --output text 2>/dev/null || echo "NOT_FOUND")
+            
+            if [ "$SERVICE_INFO" != "NOT_FOUND" ] && [ "$SERVICE_INFO" != "None" ]; then
+              EXISTING_COUNT=$((EXISTING_COUNT + 1))
+              echo "Found: $SERVICE_PREFIX-$service (Status: $SERVICE_INFO)"
+            fi
+          done
+          
+          echo "Existing services: $EXISTING_COUNT/4"
+          
+          # If less than 4 services exist, this is initial or incomplete deployment
+          if [ $EXISTING_COUNT -lt 4 ]; then
+            echo "is_initial=true" >> $GITHUB_OUTPUT
+            echo "🆕 Initial/Incomplete deployment detected - will deploy all services" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "is_initial=false" >> $GITHUB_OUTPUT
+            echo "✅ All services exist - will use change detection" >> $GITHUB_STEP_SUMMARY
+          fi
+
   # Build and deploy services
   deploy-services:
     name: Deploy Services
-    needs: [changes, deploy-infrastructure]
+    needs: [changes, deploy-infrastructure, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
@@ -171,6 +228,7 @@ jobs:
        needs.changes.outputs.frontend == 'true' || 
        needs.changes.outputs.order-service == 'true' || 
        needs.changes.outputs.user-service == 'true' ||
+       needs.check-initial-deployment.outputs.is_initial == 'true' ||
        github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
@@ -198,12 +256,23 @@ jobs:
       - name: Check if deployment needed
         id: check
         run: |
-          if [[ "${{ matrix.service.changed }}" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+          IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          
+          if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
-            echo "Deploying ${{ matrix.service.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "reason=initial" >> $GITHUB_OUTPUT
+            echo "🆕 Deploying ${{ matrix.service.name }} (initial deployment)" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ matrix.service.changed }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "reason=changed" >> $GITHUB_OUTPUT
+            echo "📝 Deploying ${{ matrix.service.name }} (code changed)" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "reason=forced" >> $GITHUB_OUTPUT
+            echo "🔄 Deploying ${{ matrix.service.name }} (forced)" >> $GITHUB_STEP_SUMMARY
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
-            echo "Skipping ${{ matrix.service.name }} (no changes)" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ Skipping ${{ matrix.service.name }} (no changes)" >> $GITHUB_STEP_SUMMARY
           fi
       
       - uses: actions/checkout@v4
@@ -260,7 +329,7 @@ jobs:
   # Update task definitions with Terraform after images are pushed
   update-task-definitions:
     name: Update Task Definitions
-    needs: [changes, deploy-services]
+    needs: [changes, deploy-services, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       needs.deploy-services.result == 'success'
@@ -304,7 +373,7 @@ jobs:
   # Force ECS to use updated task definitions
   redeploy-services:
     name: Redeploy Services
-    needs: [changes, update-task-definitions]
+    needs: [changes, update-task-definitions, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       needs.update-task-definitions.result == 'success'
@@ -326,7 +395,13 @@ jobs:
       - name: Check if deployment needed
         id: check
         run: |
-          if [[ "${{ matrix.service.changed }}" == "true" || "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+          IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          
+          if [[ "$IS_INITIAL" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service.changed }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
