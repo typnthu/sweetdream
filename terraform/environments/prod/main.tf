@@ -329,6 +329,11 @@ module "ecs_frontend" {
   enable_service_discovery = false
   service_discovery_arn    = ""
 
+  # Service URLs for frontend
+  backend_url         = "http://${module.service_discovery.backend_dns_name}:3001"
+  user_service_url    = "http://${module.alb.alb_dns_name}"
+  order_service_url   = "http://${module.alb.alb_dns_name}"
+
   # Database Configuration
   db_host     = module.rds.db_address
   db_name     = var.db_name
