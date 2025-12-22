@@ -3,6 +3,7 @@ name: Deploy to AWS
 on:
   push:
     branches: [main, master, dev]
+  
   workflow_dispatch:
     inputs:
       environment:
@@ -27,20 +28,32 @@ permissions:
   id-token: write
 
 jobs:
-  # Detect changes
-  changes:
-    name: Detect Changes
+  # Wait for CI to complete and detect changes
+  wait-for-ci:
+    name: Wait for CI & Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      order-service: ${{ steps.filter.outputs.order-service }}
-      user-service: ${{ steps.filter.outputs.user-service }}
-      terraform: ${{ steps.filter.outputs.terraform }}
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      order-service: ${{ steps.changes.outputs.order-service }}
+      user-service: ${{ steps.changes.outputs.user-service }}
+      terraform: ${{ steps.changes.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
+      
+      - name: Wait for CI workflow
+        if: github.event_name == 'push'
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-regexp: '^(Backend|Frontend|Order Service|User Service|Terraform|CI Summary)$'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success,skipped
+      
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v3
         with:
           filters: |
             backend:
@@ -53,12 +66,29 @@ jobs:
               - 'user-service/**'
             terraform:
               - 'terraform/**'
+      
+      - name: Summary
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "CI workflow completed successfully"
+          else
+            echo "Manual deployment triggered"
+          fi
+          echo "Changes detected:"
+          echo "- Backend: ${{ steps.changes.outputs.backend }}"
+          echo "- Frontend: ${{ steps.changes.outputs.frontend }}"
+          echo "- Order Service: ${{ steps.changes.outputs.order-service }}"
+          echo "- User Service: ${{ steps.changes.outputs.user-service }}"
+          echo "- Terraform: ${{ steps.changes.outputs.terraform }}"
 
   # Deploy infrastructure
   deploy-infrastructure:
     name: Deploy Infrastructure
-    needs: changes
-    if: needs.changes.outputs.terraform == 'true' || github.event.inputs.force_deploy == 'true'
+    needs: [wait-for-ci]
+    if: |
+      always() && !cancelled() &&
+      needs.wait-for-ci.result == 'success' &&
+      (needs.wait-for-ci.outputs.terraform == 'true' || github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
@@ -67,6 +97,8 @@ jobs:
         working-directory: terraform/environments/${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'prod' || 'dev') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -83,54 +115,6 @@ jobs:
       
       - name: Terraform Validate
         run: terraform validate
-      
-      - name: Cleanup conflicting resources (if analytics enabled)
-        if: vars.ENABLE_ANALYTICS == 'true'
-        continue-on-error: true
-        run: |
-          echo "Cleaning up conflicting resources..."
-          
-          # Only delete if they exist outside Terraform state
-          # Check if resources exist in state first
-          if ! terraform state list | grep -q "module.backend_analytics"; then
-            echo "Resources not in state, cleaning up manually created ones..."
-            
-            # Delete CloudWatch query definitions that conflict
-            QUERIES=$(aws logs describe-query-definitions \
-              --query 'queryDefinitions[?contains(name, `sweetdream-service`)].queryDefinitionId' \
-              --output text 2>/dev/null || echo "")
-            
-            if [ ! -z "$QUERIES" ]; then
-              echo "Found conflicting CloudWatch queries, deleting..."
-              for query_id in $QUERIES; do
-                aws logs delete-query-definition --query-definition-id "$query_id" 2>/dev/null || true
-              done
-            fi
-            
-            # Delete IAM roles if they exist
-            aws iam delete-role-policy \
-              --role-name sweetdream-service-backend-export-lambda-role \
-              --policy-name sweetdream-service-backend-export-lambda-policy \
-              2>/dev/null || true
-            
-            aws iam delete-role \
-              --role-name sweetdream-service-backend-export-lambda-role \
-              2>/dev/null || true
-            
-            aws iam delete-role-policy \
-              --role-name sweetdream-service-order-service-export-lambda-role \
-              --policy-name sweetdream-service-order-service-export-lambda-policy \
-              2>/dev/null || true
-            
-            aws iam delete-role \
-              --role-name sweetdream-service-order-service-export-lambda-role \
-              2>/dev/null || true
-            
-            echo "Cleanup complete, waiting 10 seconds..."
-            sleep 10
-          else
-            echo "Resources already in Terraform state, skipping cleanup"
-          fi
       
       - name: Terraform Plan
         run: |
@@ -154,10 +138,6 @@ jobs:
           echo "## Infrastructure Deployed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "VPC, ECS Cluster, RDS, ALB, and all modules deployed" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ vars.ENABLE_ANALYTICS }}" = "true" ]; then
-            echo "Analytics Lambda functions deployed" >> $GITHUB_STEP_SUMMARY
-          fi
 
   # Check if this is initial deployment (no services exist)
   check-initial-deployment:
@@ -219,14 +199,14 @@ jobs:
   # Build and deploy services
   deploy-services:
     name: Deploy Services
-    needs: [changes, deploy-infrastructure, check-initial-deployment]
+    needs: [wait-for-ci, deploy-infrastructure, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
-      (needs.changes.outputs.backend == 'true' || 
-       needs.changes.outputs.frontend == 'true' || 
-       needs.changes.outputs.order-service == 'true' || 
-       needs.changes.outputs.user-service == 'true' ||
+      (needs.wait-for-ci.outputs.backend == 'true' ||
+       needs.wait-for-ci.outputs.frontend == 'true' ||
+       needs.wait-for-ci.outputs.order-service == 'true' ||
+       needs.wait-for-ci.outputs.user-service == 'true' ||
        needs.check-initial-deployment.outputs.is_initial == 'true' ||
        github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
@@ -237,31 +217,28 @@ jobs:
           - name: backend
             path: be
             port: 3001
-            changed: ${{ needs.changes.outputs.backend }}
           - name: frontend
             path: fe
             port: 3000
-            changed: ${{ needs.changes.outputs.frontend }}
           - name: order-service
             path: order-service
             port: 3002
-            changed: ${{ needs.changes.outputs.order-service }}
           - name: user-service
             path: user-service
             port: 3003
-            changed: ${{ needs.changes.outputs.user-service }}
       fail-fast: false
     steps:
       - name: Check if deployment needed
         id: check
         run: |
           IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          CHANGED="${{ needs.wait-for-ci.outputs[matrix.service.name] }}"
           
           if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=initial" >> $GITHUB_OUTPUT
             echo "Deploying ${{ matrix.service.name }} (initial deployment)" >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ matrix.service.changed }}" == "true" ]]; then
+          elif [[ "$CHANGED" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=changed" >> $GITHUB_OUTPUT
             echo "Deploying ${{ matrix.service.name }} (code changed)" >> $GITHUB_STEP_SUMMARY
@@ -276,6 +253,8 @@ jobs:
       
       - uses: actions/checkout@v4
         if: steps.check.outputs.deploy == 'true'
+        with:
+          ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
         if: steps.check.outputs.deploy == 'true'
@@ -328,7 +307,7 @@ jobs:
   # Update task definitions with Terraform after images are pushed
   update-task-definitions:
     name: Update Task Definitions
-    needs: [changes, deploy-services, check-initial-deployment]
+    needs: [wait-for-ci, deploy-services, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       needs.deploy-services.result == 'success'
@@ -339,6 +318,8 @@ jobs:
         working-directory: terraform/environments/${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'prod' || 'dev') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -372,7 +353,7 @@ jobs:
   # Force ECS to use updated task definitions
   redeploy-services:
     name: Redeploy Services
-    needs: [changes, update-task-definitions, check-initial-deployment]
+    needs: [wait-for-ci, update-task-definitions, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       needs.update-task-definitions.result == 'success'
@@ -382,23 +363,20 @@ jobs:
       matrix:
         service:
           - name: backend
-            changed: ${{ needs.changes.outputs.backend }}
           - name: frontend
-            changed: ${{ needs.changes.outputs.frontend }}
           - name: order-service
-            changed: ${{ needs.changes.outputs.order-service }}
           - name: user-service
-            changed: ${{ needs.changes.outputs.user-service }}
       fail-fast: false
     steps:
       - name: Check if deployment needed
         id: check
         run: |
           IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          CHANGED="${{ needs.wait-for-ci.outputs[matrix.service.name] }}"
           
           if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.service.changed }}" == "true" ]]; then
+          elif [[ "$CHANGED" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
@@ -499,83 +477,10 @@ jobs:
             echo "$SERVICE_NAME is stable" >> $GITHUB_STEP_SUMMARY
           fi
 
-  # Verify analytics deployment
-  verify-analytics:
-    name: Verify Analytics
-    needs: [deploy-infrastructure]
-    if: |
-      always() && !cancelled() &&
-      needs.deploy-infrastructure.result == 'success' &&
-      vars.ENABLE_ANALYTICS == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-      
-      - name: Verify Lambda Functions
-        id: verify
-        run: |
-          echo "Verifying Analytics Lambda deployment..."
-          
-          BACKEND_LAMBDA=$(aws lambda get-function \
-            --function-name sweetdream-service-backend-export-logs \
-            --query 'Configuration.FunctionName' \
-            --output text 2>/dev/null || echo "NOT_FOUND")
-          
-          ORDER_LAMBDA=$(aws lambda get-function \
-            --function-name sweetdream-service-order-service-export-logs \
-            --query 'Configuration.FunctionName' \
-            --output text 2>/dev/null || echo "NOT_FOUND")
-          
-          echo "backend_lambda=$BACKEND_LAMBDA" >> $GITHUB_OUTPUT
-          echo "order_lambda=$ORDER_LAMBDA" >> $GITHUB_OUTPUT
-          
-          echo "## Analytics Lambda Status" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Function | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend Export | $BACKEND_LAMBDA |" >> $GITHUB_STEP_SUMMARY
-          echo "| Order Export | $ORDER_LAMBDA |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-      
-      - name: Test Lambda Functions
-        if: steps.verify.outputs.backend_lambda != 'NOT_FOUND'
-        run: |
-          echo "Testing Lambda functions..."
-          
-          # Test backend Lambda (empty payload - exports today's logs)
-          aws lambda invoke \
-            --function-name sweetdream-service-backend-export-logs \
-            --payload '{}' \
-            --cli-binary-format raw-in-base64-out \
-            response-backend.json
-          
-          # Test order Lambda (empty payload - exports today's logs)
-          aws lambda invoke \
-            --function-name sweetdream-service-order-service-export-logs \
-            --payload '{}' \
-            --cli-binary-format raw-in-base64-out \
-            response-order.json
-          
-          echo "### Lambda Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Backend:**" >> $GITHUB_STEP_SUMMARY
-          echo '```json' >> $GITHUB_STEP_SUMMARY
-          cat response-backend.json >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Order:**" >> $GITHUB_STEP_SUMMARY
-          echo '```json' >> $GITHUB_STEP_SUMMARY
-          cat response-order.json >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
   # Deployment summary
   summary:
     name: Deployment Summary
-    needs: [changes, deploy-infrastructure, deploy-services, verify-analytics]
+    needs: [wait-for-ci, deploy-infrastructure, deploy-services]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -613,26 +518,6 @@ jobs:
             echo "${service}_status=$STATUS" >> $GITHUB_OUTPUT
           done
       
-      - name: Check Analytics Status
-        id: analytics
-        if: vars.ENABLE_ANALYTICS == 'true'
-        run: |
-          BACKEND_LAMBDA=$(aws lambda get-function \
-            --function-name sweetdream-service-backend-export-logs \
-            --query 'Configuration.FunctionName' \
-            --output text 2>/dev/null || echo "NOT_FOUND")
-          
-          ORDER_LAMBDA=$(aws lambda get-function \
-            --function-name sweetdream-service-order-service-export-logs \
-            --query 'Configuration.FunctionName' \
-            --output text 2>/dev/null || echo "NOT_FOUND")
-          
-          if [ "$BACKEND_LAMBDA" != "NOT_FOUND" ] && [ "$ORDER_LAMBDA" != "NOT_FOUND" ]; then
-            echo "status=Deployed" >> $GITHUB_OUTPUT
-          else
-            echo "status=Failed" >> $GITHUB_OUTPUT
-          fi
-      
       - name: Create Summary
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
@@ -647,10 +532,6 @@ jobs:
           echo "| Order Service | ${{ steps.info.outputs.order-service_status }} |" >> $GITHUB_STEP_SUMMARY
           echo "| User Service | ${{ steps.info.outputs.user-service_status }} |" >> $GITHUB_STEP_SUMMARY
           
-          if [ "${{ vars.ENABLE_ANALYTICS }}" = "true" ]; then
-            echo "| Analytics Lambda | ${{ steps.analytics.outputs.status || 'Skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
           echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "### Access" >> $GITHUB_STEP_SUMMARY
@@ -661,12 +542,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "### Changes Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: ${{ needs.changes.outputs.backend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: ${{ needs.changes.outputs.frontend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Order Service: ${{ needs.changes.outputs.order-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- User Service: ${{ needs.changes.outputs.user-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Terraform: ${{ needs.changes.outputs.terraform == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ vars.ENABLE_ANALYTICS }}" = "true" ]; then
-            echo "- Analytics: ${{ needs.verify-analytics.result == 'success' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "- Backend: ${{ needs.wait-for-ci.outputs.backend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ needs.wait-for-ci.outputs.frontend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Order Service: ${{ needs.wait-for-ci.outputs.order-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- User Service: ${{ needs.wait-for-ci.outputs.user-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform: ${{ needs.wait-for-ci.outputs.terraform == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
