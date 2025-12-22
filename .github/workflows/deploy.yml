@@ -38,9 +38,10 @@ jobs:
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.sha }}
-          check-name: 'CI Summary'
+          check-regexp: '^(Backend|Frontend|Order Service|User Service|Terraform|CI Summary)$'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
+          allowed-conclusions: success,skipped
       
       - name: CI Passed
         run: echo "CI workflow completed successfully"
