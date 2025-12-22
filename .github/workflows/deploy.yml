@@ -196,82 +196,95 @@ jobs:
             echo "All services exist - will use change detection" >> $GITHUB_STEP_SUMMARY
           fi
 
-  # Prepare matrix for services that need deployment
-  prepare-deploy-matrix:
-    name: Prepare Deploy Matrix
+  # Build and deploy services
+  deploy-services:
+    name: Deploy Services
     needs: [wait-for-ci, deploy-infrastructure, check-initial-deployment]
     if: |
       always() && !cancelled() &&
-      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped')
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      has-services: ${{ steps.set-matrix.outputs.has-services }}
-    steps:
-      - name: Prepare deployment matrix
-        id: set-matrix
-        run: |
-          IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
-          FORCE="${{ github.event.inputs.force_deploy }}"
-          
-          SERVICES='[]'
-          
-          # Check each service
-          if [[ "$IS_INITIAL" == "true" || "$FORCE" == "true" || "${{ needs.wait-for-ci.outputs.backend }}" == "true" ]]; then
-            SERVICES=$(echo "$SERVICES" | jq '. += [{"name":"backend","path":"be","port":3001}]')
-          fi
-          
-          if [[ "$IS_INITIAL" == "true" || "$FORCE" == "true" || "${{ needs.wait-for-ci.outputs.frontend }}" == "true" ]]; then
-            SERVICES=$(echo "$SERVICES" | jq '. += [{"name":"frontend","path":"fe","port":3000}]')
-          fi
-          
-          if [[ "$IS_INITIAL" == "true" || "$FORCE" == "true" || "${{ needs.wait-for-ci.outputs.order-service }}" == "true" ]]; then
-            SERVICES=$(echo "$SERVICES" | jq '. += [{"name":"order-service","path":"order-service","port":3002}]')
-          fi
-          
-          if [[ "$IS_INITIAL" == "true" || "$FORCE" == "true" || "${{ needs.wait-for-ci.outputs.user-service }}" == "true" ]]; then
-            SERVICES=$(echo "$SERVICES" | jq '. += [{"name":"user-service","path":"user-service","port":3003}]')
-          fi
-          
-          echo "matrix={\"service\":$SERVICES}" >> $GITHUB_OUTPUT
-          
-          # Check if we have any services to deploy
-          COUNT=$(echo "$SERVICES" | jq 'length')
-          if [[ "$COUNT" -gt 0 ]]; then
-            echo "has-services=true" >> $GITHUB_OUTPUT
-            echo "Services to deploy: $COUNT" >> $GITHUB_STEP_SUMMARY
-            echo "$SERVICES" | jq -r '.[] | "- \(.name)"' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "has-services=false" >> $GITHUB_OUTPUT
-            echo "No services to deploy" >> $GITHUB_STEP_SUMMARY
-          fi
-
-  # Build and deploy services
-  deploy-services:
-    name: Deploy ${{ matrix.service.name }}
-    needs: [wait-for-ci, prepare-deploy-matrix, check-initial-deployment]
-    if: needs.prepare-deploy-matrix.outputs.has-services == 'true'
+      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
+      (needs.wait-for-ci.outputs.backend == 'true' ||
+       needs.wait-for-ci.outputs.frontend == 'true' ||
+       needs.wait-for-ci.outputs.order-service == 'true' ||
+       needs.wait-for-ci.outputs.user-service == 'true' ||
+       needs.check-initial-deployment.outputs.is_initial == 'true' ||
+       github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
     strategy:
-      matrix: ${{ fromJson(needs.prepare-deploy-matrix.outputs.matrix) }}
+      matrix:
+        service:
+          - name: backend
+            path: be
+            port: 3001
+          - name: frontend
+            path: fe
+            port: 3000
+          - name: order-service
+            path: order-service
+            port: 3002
+          - name: user-service
+            path: user-service
+            port: 3003
       fail-fast: false
     steps:
+      - name: Check if deployment needed
+        id: check
+        run: |
+          IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          SERVICE_NAME="${{ matrix.service.name }}"
+          
+          # Get changed status for this service
+          case "$SERVICE_NAME" in
+            "backend")
+              CHANGED="${{ needs.wait-for-ci.outputs.backend }}"
+              ;;
+            "frontend")
+              CHANGED="${{ needs.wait-for-ci.outputs.frontend }}"
+              ;;
+            "order-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.order-service }}"
+              ;;
+            "user-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.user-service }}"
+              ;;
+            *)
+              CHANGED="false"
+              ;;
+          esac
+          
+          if [[ "$IS_INITIAL" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "Deploying $SERVICE_NAME (initial deployment)"
+          elif [[ "$CHANGED" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "Deploying $SERVICE_NAME (code changed)"
+          elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "Deploying $SERVICE_NAME (forced)"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "Skipping $SERVICE_NAME (no changes)"
+          fi
+      
       - uses: actions/checkout@v4
+        if: steps.check.outputs.deploy == 'true'
         with:
           ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check.outputs.deploy == 'true'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
       
       - uses: aws-actions/amazon-ecr-login@v2
+        if: steps.check.outputs.deploy == 'true'
         id: ecr
       
       - name: Get ALB URL
-        if: matrix.service.name == 'frontend'
+        if: steps.check.outputs.deploy == 'true' && matrix.service.name == 'frontend'
         id: alb
         run: |
           ALB_URL=$(aws elbv2 describe-load-balancers \
@@ -280,6 +293,7 @@ jobs:
           echo "url=$ALB_URL" >> $GITHUB_OUTPUT
       
       - name: Build & Push Docker Image
+        if: steps.check.outputs.deploy == 'true'
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -354,25 +368,66 @@ jobs:
 
   # Force ECS to use updated task definitions
   redeploy-services:
-    name: Redeploy ${{ matrix.service.name }}
-    needs: [prepare-deploy-matrix, update-task-definitions]
+    name: Redeploy Services
+    needs: [wait-for-ci, update-task-definitions, check-initial-deployment]
     if: |
       always() && !cancelled() &&
-      needs.update-task-definitions.result == 'success' &&
-      needs.prepare-deploy-matrix.outputs.has-services == 'true'
+      needs.update-task-definitions.result == 'success'
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
     strategy:
-      matrix: ${{ fromJson(needs.prepare-deploy-matrix.outputs.matrix) }}
+      matrix:
+        service:
+          - name: backend
+          - name: frontend
+          - name: order-service
+          - name: user-service
       fail-fast: false
     steps:
+      - name: Check if deployment needed
+        id: check
+        run: |
+          IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          SERVICE_NAME="${{ matrix.service.name }}"
+          
+          # Get changed status for this service
+          case "$SERVICE_NAME" in
+            "backend")
+              CHANGED="${{ needs.wait-for-ci.outputs.backend }}"
+              ;;
+            "frontend")
+              CHANGED="${{ needs.wait-for-ci.outputs.frontend }}"
+              ;;
+            "order-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.order-service }}"
+              ;;
+            "user-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.user-service }}"
+              ;;
+            *)
+              CHANGED="false"
+              ;;
+          esac
+          
+          if [[ "$IS_INITIAL" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          elif [[ "$CHANGED" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+          fi
+      
       - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check.outputs.deploy == 'true'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
       
       - name: Deploy to ECS
+        if: steps.check.outputs.deploy == 'true'
         run: |
           # Determine service name based on environment
           if [[ "${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" == "production" ]]; then
@@ -422,6 +477,7 @@ jobs:
           fi
       
       - name: Wait for deployment
+        if: steps.check.outputs.deploy == 'true'
         run: |
           # Determine service name based on environment
           if [[ "${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}" == "production" ]]; then
