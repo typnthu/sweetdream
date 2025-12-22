@@ -1,13 +1,9 @@
 name: Deploy to AWS
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  push:
     branches: [main, master, dev]
   
-  # Manual deployment trigger
   workflow_dispatch:
     inputs:
       environment:
@@ -32,37 +28,32 @@ permissions:
   id-token: write
 
 jobs:
+  # Wait for CI to complete
+  wait-for-ci:
+    name: Wait for CI
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'CI Summary'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+      
+      - name: CI Passed
+        run: echo "CI workflow completed successfully"
+
   # Check if CI passed
   check-ci:
     name: Check CI Status
+    needs: [wait-for-ci]
+    if: always() && (needs.wait-for-ci.result == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
-      - name: Debug workflow run info
-        if: github.event_name == 'workflow_run'
-        run: |
-          echo "Workflow run event detected"
-          echo "Workflow name: ${{ github.event.workflow_run.name }}"
-          echo "Workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "Branch: ${{ github.event.workflow_run.head_branch }}"
-          echo "Event: ${{ github.event.workflow_run.event }}"
-      
-      - name: Check CI Result
-        if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success'
-        run: |
-          echo "CI workflow failed or was cancelled. Skipping deployment."
-          exit 1
-      
-      - name: CI Passed
-        if: github.event_name == 'workflow_run'
-        run: |
-          echo "CI workflow passed successfully"
-          echo "Proceeding with deployment..."
-      
-      - name: Manual Deployment
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "Manual deployment triggered"
-          echo "Skipping CI check for manual deployment"
+      - name: CI Check Complete
+        run: echo "CI has passed, proceeding with deployment"
 
   # Detect changes
   changes:
@@ -79,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
       
       - uses: dorny/paths-filter@v3
         id: filter
@@ -110,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -269,7 +260,7 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.check.outputs.deploy == 'true'
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
         if: steps.check.outputs.deploy == 'true'
@@ -334,7 +325,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
       
       - uses: aws-actions/configure-aws-credentials@v4
         with:
