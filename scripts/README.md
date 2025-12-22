@@ -1,344 +1,416 @@
-# SweetDream Deployment Scripts & Guide
+# SweetDream Deployment Scripts
 
 ## Overview
 
-This directory contains deployment scripts and documentation for the SweetDream e-commerce platform. **Note:** With the implementation of GitHub Actions CI/CD pipeline, most of these scripts are now legacy and primarily useful for local development and testing.
+This directory contains deployment and utility scripts for the SweetDream e-commerce platform. The project uses **GitHub Actions** for automated CI/CD, but these scripts are useful for local development, testing, and manual deployments.
 
-## Current Deployment Method
+## Deployment Strategy
 
-**Recommended:** Use GitHub Actions workflows for automated deployment:
-- Push to `dev` branch → Automatic CI testing → Automatic deployment to development
-- Push to `master` branch → Automatic CI testing → Automatic deployment to production
-- Manual deployment via GitHub Actions interface
+**Primary Method:** GitHub Actions CI/CD Pipeline
+- Push to `dev` branch → Auto-deploy to Development (us-east-1)
+- Push to `master` branch → Auto-deploy to Production (us-west-2)
+- Manual workflow dispatch available in GitHub Actions UI
 
-## Available Scripts (Legacy)
+**Secondary Method:** Local scripts for development and troubleshooting
 
-### Infrastructure Setup
-- `setup-s3-backends.sh` - Create S3 backends for Terraform state
-- `deploy-dev.sh` - Deploy to development environment
-- `deploy-prod.sh` - Deploy to production environment
+## Available Scripts
 
-### Container Management  
-- `create-ecr-repos.ps1` - Create ECR repositories
-- `deploy-images.sh` - Build and push Docker images to ECR
-- `deploy-images.ps1` - PowerShell version for Windows
-- `build-and-deploy.sh` - Complete build and deploy script (Linux/Mac)
-- `build-and-deploy.ps1` - Complete build and deploy script (Windows)
+### 🚀 Deployment Scripts
 
-### Validation and Setup
-- `validate-setup.sh` - Check prerequisites and system readiness (Linux/Mac)
-- `validate-setup.ps1` - Check prerequisites and system readiness (Windows)
-- `make-executable.sh` - Make shell scripts executable (Linux/Mac)
+#### `setup-s3-backends.sh`
+**One-time setup** - Creates S3 buckets for Terraform state storage
 
-## Prerequisites
+**Features:**
+- Creates separate buckets for dev and prod environments
+- Enables versioning for state file history
+- Configures server-side encryption (AES256)
+- Blocks public access for security
+- Idempotent (safe to run multiple times)
 
-### Required Tools
-- Docker Desktop (running)
-- AWS CLI v2 (configured with credentials)
-- Terraform (for infrastructure deployment)
-- Git (for version control)
-
-### AWS Configuration
+**Usage:**
 ```bash
-# Configure AWS CLI with your credentials
-aws configure
-
-# Verify configuration
-aws sts get-caller-identity
+./scripts/setup-s3-backends.sh
 ```
 
-## Quick Start - GitHub Actions (Recommended)
+**Creates:**
+- `sweetdream-terraform-state-dev` (us-east-1)
+- `sweetdream-terraform-state-prod` (us-west-2)
 
-### Automatic Deployment
+---
+
+#### `build-and-deploy.sh` / `build-and-deploy.ps1`
+**Complete deployment** - Builds Docker images and pushes to ECR
+
+**Features:**
+- Validates AWS credentials and Docker
+- Logs into ECR automatically
+- Builds all 4 services (backend, frontend, user-service, order-service)
+- Tags images with environment and version
+- Pushes to appropriate ECR repositories
+- Cross-platform (Bash for Linux/Mac, PowerShell for Windows)
+
+**Usage:**
 ```bash
-# Push to development
-git push origin dev
-# → Triggers CI → On success, deploys to development environment
+# Linux/Mac
+./scripts/build-and-deploy.sh [environment] [image_tag]
 
-# Push to production
-git push origin master
-# → Triggers CI → On success, deploys to production environment
+# Examples:
+./scripts/build-and-deploy.sh dev latest
+./scripts/build-and-deploy.sh prod v1.2.0
+
+# Windows PowerShell
+.\scripts\build-and-deploy.ps1 -Environment dev -ImageTag latest
+.\scripts\build-and-deploy.ps1 -Environment prod -ImageTag v1.2.0
 ```
 
-### Manual Deployment via GitHub Actions
-1. Go to your repository on GitHub
-2. Click **Actions** tab
-3. Select **Deploy to AWS** workflow
-4. Click **Run workflow**
-5. Choose environment (development/production)
-6. Optionally enable **Force deploy** to deploy all services
-7. Click **Run workflow**
+**Parameters:**
+- `environment`: `dev` (default) or `prod`
+- `image_tag`: Docker image tag (default: `latest`)
 
-## Legacy Manual Deployment
+---
 
-### Prerequisites Check (Recommended First Step)
+### 🔍 Validation Scripts
+
+#### `validate-setup.sh` / `validate-setup.ps1`
+**Prerequisites checker** - Validates your local environment
+
+**Checks:**
+- Docker installation and daemon status
+- AWS CLI installation and version
+- AWS credentials configuration
+- Terraform installation
+- Git installation
+- Required permissions
+
+**Usage:**
 ```bash
-# Linux/Mac - Check if system is ready for deployment
+# Linux/Mac
 ./scripts/validate-setup.sh
 
 # Windows PowerShell
 .\scripts\validate-setup.ps1
 ```
 
-### Option 1: Complete Build and Deploy (Recommended)
+**Output:**
+- ✅ Green checkmarks for passed checks
+- ❌ Red X for failed checks
+- Suggestions for fixing issues
 
-**Linux/Mac:**
-```bash
-# Make scripts executable (first time only)
-./scripts/make-executable.sh
+---
 
-# Deploy to development
-./scripts/build-and-deploy.sh dev latest
+### 📊 Testing Scripts
 
-# Deploy to production
-./scripts/build-and-deploy.sh prod latest
-```
+#### `load-test-autoscaling.ps1`
+**Load testing** - Tests ECS auto-scaling behavior
 
-**Windows PowerShell:**
-```powershell
-# Deploy to development
-.\scripts\build-and-deploy.ps1 -Environment dev -ImageTag latest
-
-# Deploy to production
-.\scripts\build-and-deploy.ps1 -Environment prod -ImageTag latest
-```
-
-### Option 2: Step-by-Step Deployment
-
-#### Step 1: Create ECR Repositories (First time only)
-```powershell
-# Windows only - creates ECR repositories
-.\scripts\create-ecr-repos.ps1
-```
-
-#### Step 2: Build and Push Images
-**Linux/Mac:**
-```bash
-./scripts/deploy-images.sh dev latest
-./scripts/deploy-images.sh prod v1.0.0
-```
-
-**Windows:**
-```powershell
-.\scripts\deploy-images.ps1 -Environment dev -ImageTag latest
-.\scripts\deploy-images.ps1 -Environment prod -ImageTag latest
-```
-
-#### Step 3: Deploy Infrastructure
-```bash
-# Development
-./scripts/deploy-dev.sh
-
-# Production (with confirmation prompts)
-./scripts/deploy-prod.sh
-```
-
-## Script Details
-
-### build-and-deploy.sh / build-and-deploy.ps1
-**Most comprehensive script** - handles everything:
-- Creates ECR repositories (if they don't exist)
-- Sets up lifecycle policies (keeps 10 images)
-- Builds all Docker images
-- Pushes to ECR with proper tagging
-- Provides deployment summary
+**Features:**
+- Sends concurrent requests to test endpoints
+- Monitors ECS service scaling
+- Tracks response times and success rates
+- Validates auto-scaling policies
 
 **Usage:**
-```bash
-./build-and-deploy.sh [environment] [image_tag]
-
-# Examples:
-./build-and-deploy.sh                    # dev environment, latest tag
-./build-and-deploy.sh prod               # prod environment, latest tag  
-./build-and-deploy.sh dev v1.2.3         # dev environment, v1.2.3 tag
-./build-and-deploy.sh prod release-1.0   # prod environment, release-1.0 tag
+```powershell
+# Windows PowerShell only
+.\scripts\load-test-autoscaling.ps1 -AlbUrl "http://your-alb-url.amazonaws.com" -Duration 300
 ```
 
-### deploy-images.sh / deploy-images.ps1
-**Image-only deployment** - builds and pushes images:
-- Assumes ECR repositories exist
-- Builds all service images
-- Pushes to ECR with environment-specific tags
+**Parameters:**
+- `AlbUrl`: Your Application Load Balancer URL
+- `Duration`: Test duration in seconds (default: 300)
 
-### create-ecr-repos.ps1
-**Repository setup** - creates ECR repositories:
-- Creates all required ECR repositories
-- Sets up lifecycle policies
-- Configures image scanning
-- Windows PowerShell only
+---
 
-### deploy-dev.sh / deploy-prod.sh
-**Infrastructure deployment** - deploys Terraform:
-- Initializes Terraform
-- Plans and applies infrastructure
-- Shows deployment outputs
-- Production script includes confirmation prompts
+## Quick Start Guide
+
+### First-Time Setup
+
+1. **Validate your environment:**
+   ```bash
+   ./scripts/validate-setup.sh
+   ```
+
+2. **Configure AWS credentials:**
+   ```bash
+   aws configure
+   # Enter: Access Key ID, Secret Access Key, Region (us-east-1 for dev)
+   ```
+
+3. **Create S3 backends for Terraform:**
+   ```bash
+   ./scripts/setup-s3-backends.sh
+   ```
+
+4. **Deploy infrastructure via Terraform:**
+   ```bash
+   cd terraform/environments/dev
+   terraform init
+   terraform apply
+   ```
+
+### Regular Development Workflow
+
+**Option 1: GitHub Actions (Recommended)**
+```bash
+# Make changes to code
+git add .
+git commit -m "Your changes"
+git push origin dev  # Auto-deploys to development
+```
+
+**Option 2: Manual Local Deployment**
+```bash
+# Build and push images
+./scripts/build-and-deploy.sh dev latest
+
+# Update ECS services (Terraform will detect new images)
+cd terraform/environments/dev
+terraform apply -auto-approve
+```
 
 ## Environment Configuration
 
 ### Development Environment
 - **Region:** us-east-1
-- **ECR Repositories:** 
-  - sweetdream-backend
-  - sweetdream-frontend
-  - sweetdream-user-service
-  - sweetdream-order-service
+- **Cluster:** sweetdream-cluster
+- **Services:** 
+  - `sweetdream-dev-service-backend`
+  - `sweetdream-dev-service-frontend`
+  - `sweetdream-dev-service-user-service`
+  - `sweetdream-dev-service-order-service`
+- **Deployment:** Rolling updates
+- **Resources:** Lower capacity (cost-optimized)
 
 ### Production Environment
 - **Region:** us-west-2
-- **ECR Repositories:** Same as development
-- **Additional:** Blue/Green deployment enabled
+- **Cluster:** sweetdream-cluster
+- **Services:**
+  - `sweetdream-prod-service-backend`
+  - `sweetdream-prod-service-frontend`
+  - `sweetdream-prod-service-user-service`
+  - `sweetdream-prod-service-order-service`
+- **Deployment:** Rolling updates (Blue/Green removed)
+- **Resources:** Higher capacity, auto-scaling enabled
 
-## GitHub Actions Integration
+## Architecture Overview
 
-The project now uses GitHub Actions for automated CI/CD:
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Application Load Balancer            │
+│                  (Public-facing, HTTPS)                 │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ├─────► Frontend (Port 3000)
+                     │       └─► Calls backend services via proxy
+                     │
+┌────────────────────┴────────────────────────────────────┐
+│              Service Discovery (sweetdream.local)        │
+│                    (Internal DNS)                        │
+└─────┬──────────────┬──────────────┬─────────────────────┘
+      │              │              │
+      ▼              ▼              ▼
+  Backend      User Service   Order Service
+ (Port 3001)   (Port 3003)    (Port 3002)
+      │              │              │
+      └──────────────┴──────────────┘
+                     │
+                     ▼
+              RDS PostgreSQL
+           (Private subnet)
+```
 
-### Workflow Files
-- `.github/workflows/ci.yml` - Continuous Integration (testing)
-- `.github/workflows/deploy.yml` - Deployment to AWS
-- `.github/workflows/pr-checks.yml` - Pull request validation
+**Key Points:**
+- Only **Frontend** is exposed via ALB
+- **Backend, User-Service, Order-Service** use Service Discovery (internal)
+- Frontend proxies API requests to backend services
+- All services connect to shared RDS database
 
-### Environment Variables Required
-Set these in GitHub repository settings:
+## GitHub Actions Workflows
 
-**Secrets:**
+### `.github/workflows/deploy.yml`
+**Main deployment pipeline:**
+
+1. **Detect Changes** - Identifies which services changed
+2. **Deploy Infrastructure** - Runs Terraform if infrastructure changed
+3. **Check Initial Deployment** - Determines if services exist
+4. **Deploy Services** - Builds and pushes Docker images for changed services
+5. **Update Task Definitions** - Updates ECS task definitions via Terraform
+6. **Redeploy Services** - Forces ECS to use new task definitions
+7. **Summary** - Provides deployment status and URLs
+
+**Triggers:**
+- Push to `main`, `master`, or `dev` branches
+- Manual workflow dispatch
+
+**Required Secrets:**
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `DB_PASSWORD`
 - `DB_USERNAME`
 - `ALERT_EMAIL`
 
-**Variables:**
+**Required Variables:**
 - `AWS_REGION`
 - `ENVIRONMENT`
-- `VPC_CIDR`
 - `CLUSTER_NAME`
-- `DB_NAME`
 - `S3_BUCKET_NAME`
-- `ENABLE_ANALYTICS`
 - `LOG_RETENTION_DAYS`
+
+### `.github/workflows/pr-checks.yml`
+**Pull request validation:**
+- Terraform validation
+- Security scanning with Trivy
+- Runs on all PRs
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Docker not running:**
+#### Docker not running
 ```bash
-# Start Docker Desktop and wait for it to be ready
+# Check Docker status
 docker version
+
+# Start Docker Desktop (GUI) or daemon
+# Linux: sudo systemctl start docker
+# Mac/Windows: Start Docker Desktop application
 ```
 
-**AWS credentials not configured:**
+#### AWS credentials not configured
 ```bash
+# Configure credentials
 aws configure
-# Enter your Access Key ID, Secret Access Key, and region
-```
 
-**ECR login failed:**
-```bash
-# Check AWS credentials and region
+# Verify
 aws sts get-caller-identity
-aws ecr get-login-password --region us-east-1
 ```
 
-**Build failures:**
+#### ECR login failed
 ```bash
-# Check Docker daemon is running
-docker info
+# Get ECR login command
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
 
-# Check for syntax errors in Dockerfiles
-docker build -t test ./be
+# Check region matches your environment
+# Dev: us-east-1
+# Prod: us-west-2
+```
+
+#### Service deployment stuck
+```bash
+# Check ECS service status
+aws ecs describe-services --cluster sweetdream-cluster --services sweetdream-dev-service-backend --region us-east-1
+
+# Check task logs
+aws logs tail /ecs/sweetdream-backend --follow --region us-east-1
+
+# Force new deployment
+aws ecs update-service --cluster sweetdream-cluster --service sweetdream-dev-service-backend --force-new-deployment --region us-east-1
+```
+
+#### Terraform state locked
+```bash
+# List DynamoDB lock table (if using)
+aws dynamodb scan --table-name terraform-state-lock
+
+# Force unlock (use with caution!)
+terraform force-unlock <lock-id>
 ```
 
 ### Script Permissions (Linux/Mac)
+
 ```bash
-# Make scripts executable
+# Make all scripts executable
 chmod +x scripts/*.sh
 
-# Or use the helper script
-./scripts/make-executable.sh
+# Or individually
+chmod +x scripts/build-and-deploy.sh
+chmod +x scripts/setup-s3-backends.sh
+chmod +x scripts/validate-setup.sh
 ```
 
-### GitHub Actions Issues
+## Best Practices
+
+### Development
+- Always run `validate-setup` before first deployment
+- Use `dev` environment for testing
+- Tag images with meaningful versions (not just `latest`)
+- Test locally with Docker Compose before deploying
+
+### Production
+- Never deploy directly to prod without testing in dev
+- Use semantic versioning for image tags (v1.2.3)
+- Review Terraform plan before applying
+- Monitor CloudWatch logs after deployment
+- Keep Terraform state in S3 (never local)
+
+### Security
+- Never commit AWS credentials to Git
+- Use IAM roles with least privilege
+- Enable MFA for AWS console access
+- Rotate credentials regularly
+- Use GitHub secrets for CI/CD credentials
+
+### Cost Optimization
+- Stop dev environment when not in use
+- Use FARGATE_SPOT for non-critical workloads
+- Set appropriate auto-scaling limits
+- Clean up old ECR images (lifecycle policies)
+- Monitor AWS Cost Explorer regularly
+
+## Monitoring and Debugging
+
+### Check Service Health
 ```bash
-# Check workflow status
-gh run list --workflow=ci.yml
+# List all services
+aws ecs list-services --cluster sweetdream-cluster --region us-east-1
 
-# View failed run details
-gh run view [RUN_ID] --log-failed
+# Describe specific service
+aws ecs describe-services --cluster sweetdream-cluster --services sweetdream-dev-service-backend --region us-east-1
 
-# Manually trigger deployment
-# Go to Actions → Deploy to AWS → Run workflow
+# List running tasks
+aws ecs list-tasks --cluster sweetdream-cluster --service-name sweetdream-dev-service-backend --region us-east-1
 ```
 
-## Next Steps After Deployment
+### View Logs
+```bash
+# Tail logs in real-time
+aws logs tail /ecs/sweetdream-backend --follow --region us-east-1
 
-1. **Verify ECR Images:**
-   ```bash
-   aws ecr list-images --repository-name sweetdream-backend --region us-east-1
-   ```
+# Get recent logs
+aws logs tail /ecs/sweetdream-backend --since 1h --region us-east-1
 
-2. **Check ECS Services:**
-   ```bash
-   aws ecs list-services --cluster sweetdream-cluster --region us-east-1
-   ```
+# Filter logs
+aws logs tail /ecs/sweetdream-backend --filter-pattern "ERROR" --region us-east-1
+```
 
-3. **Test Application:**
-   - Check ALB URL from Terraform outputs
-   - Test frontend and API endpoints
-   - Verify all services are running
+### Check ALB Health
+```bash
+# Get ALB URL
+aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName, `sweetdream`)].DNSName' --output text --region us-east-1
 
-4. **Monitor Deployment:**
-   - AWS ECS Console
-   - CloudWatch Logs
-   - ALB Target Group Health
-   - GitHub Actions workflow results
-
-## Security Notes
-
-- ECR repositories use AES256 encryption
-- Image scanning enabled on push
-- Lifecycle policies limit image retention
-- Production deployments require confirmation
-- AWS credentials should use least privilege access
-- GitHub secrets are encrypted and environment-scoped
-
-## Cost Optimization
-
-- Lifecycle policies automatically clean up old images
-- Development environment uses rolling deployments
-- Production uses blue/green (higher cost but zero downtime)
-- Consider stopping development resources when not in use
-- GitHub Actions provides free CI/CD minutes
-
-## Migration from Scripts to GitHub Actions
-
-If you're currently using the manual scripts and want to migrate to GitHub Actions:
-
-1. **Set up GitHub environments** (development, production)
-2. **Configure secrets and variables** in GitHub repository settings
-3. **Test the workflows** with a small change
-4. **Archive or remove** the manual deployment scripts
-5. **Update team documentation** to use GitHub Actions workflow
-
-## Legacy Script Cleanup
-
-Since GitHub Actions now handles deployment, consider:
-
-**Keep for local development:**
-- `validate-setup.*` - Useful for new developers
-- `setup-s3-backends.sh` - One-time setup utility
-
-**Archive or remove:**
-- `build-and-deploy.*` - Replaced by GitHub Actions
-- `deploy-images.*` - Replaced by GitHub Actions
-- `deploy-*.sh` - Replaced by GitHub Actions
-- `create-ecr-repos.ps1` - Can be done via Terraform
+# Check target health
+aws elbv2 describe-target-health --target-group-arn <target-group-arn> --region us-east-1
+```
 
 ## Additional Resources
 
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [Main Project README](../README.md)
+- [Terraform Documentation](../terraform/README.md)
+- [GitHub Actions Workflows](../.github/workflows/)
 - [AWS ECS Best Practices](https://docs.aws.amazon.com/AmazonECS/latest/bestpracticesguide/)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [Docker Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/)
-- [Main Project README](../README.md)
+
+## Support
+
+For issues or questions:
+1. Check this README and troubleshooting section
+2. Review GitHub Actions workflow logs
+3. Check AWS CloudWatch logs
+4. Review Terraform plan output
+5. Contact the DevOps team
+
+---
+
+**Last Updated:** December 2025  
+**Maintained by:** SweetDream DevOps Team

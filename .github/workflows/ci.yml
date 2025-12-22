@@ -3,8 +3,7 @@ name: CI
 on:
   push:
     branches: [main, master, dev]
-  pull_request:
-    branches: [main, master, dev]
+  # Removed pull_request trigger - use pr-checks.yml for PRs instead
 
 env:
   NODE_VERSION: '20'
@@ -204,7 +203,25 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Check Overall Status
+        id: status
+        run: |
+          # Check if any job failed
+          if [[ "${{ needs.backend.result }}" == "failure" ]] || \
+             [[ "${{ needs.frontend.result }}" == "failure" ]] || \
+             [[ "${{ needs.order-service.result }}" == "failure" ]] || \
+             [[ "${{ needs.user-service.result }}" == "failure" ]] || \
+             [[ "${{ needs.terraform.result }}" == "failure" ]]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "CI Failed - Deployment will be skipped" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "CI Passed - Ready for deployment" >> $GITHUB_STEP_SUMMARY
+          fi
+      
       - name: Summary
+        if: always()
         run: |
           echo "## CI Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -215,3 +232,5 @@ jobs:
           echo "| Order Service | ${{ needs.changes.outputs.order-service }} | ${{ needs.order-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| User Service | ${{ needs.changes.outputs.user-service }} | ${{ needs.user-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Terraform | ${{ needs.changes.outputs.terraform }} | ${{ needs.terraform.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Step:** Deployment workflow will start automatically if CI passed" >> $GITHUB_STEP_SUMMARY
