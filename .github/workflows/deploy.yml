@@ -28,12 +28,20 @@ permissions:
   id-token: write
 
 jobs:
-  # Wait for CI to complete
+  # Wait for CI to complete and detect changes
   wait-for-ci:
     name: Wait for CI
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      order-service: ${{ steps.changes.outputs.order-service }}
+      user-service: ${{ steps.changes.outputs.user-service }}
+      terraform: ${{ steps.changes.outputs.terraform }}
     steps:
+      - uses: actions/checkout@v4
+      
       - name: Wait for CI workflow
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
@@ -43,38 +51,49 @@ jobs:
           wait-interval: 10
           allowed-conclusions: success,skipped
       
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'be/**'
+            frontend:
+              - 'fe/**'
+            order-service:
+              - 'order-service/**'
+            user-service:
+              - 'user-service/**'
+            terraform:
+              - 'terraform/**'
+      
       - name: CI Passed
-        run: echo "CI workflow completed successfully"
+        run: |
+          echo "CI workflow completed successfully"
+          echo "Changes detected:"
+          echo "- Backend: ${{ steps.changes.outputs.backend }}"
+          echo "- Frontend: ${{ steps.changes.outputs.frontend }}"
+          echo "- Order Service: ${{ steps.changes.outputs.order-service }}"
+          echo "- User Service: ${{ steps.changes.outputs.user-service }}"
+          echo "- Terraform: ${{ steps.changes.outputs.terraform }}"
 
-  # Check if CI passed
-  check-ci:
-    name: Check CI Status
-    needs: [wait-for-ci]
-    if: always() && (needs.wait-for-ci.result == 'success' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    steps:
-      - name: CI Check Complete
-        run: echo "CI has passed, proceeding with deployment"
-
-  # Detect changes
-  changes:
-    name: Detect Changes
-    needs: [check-ci]
-    if: always() && (needs.check-ci.result == 'success' || github.event_name == 'workflow_dispatch')
+  # Manual deployment - detect changes only
+  manual-changes:
+    name: Detect Changes (Manual)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      order-service: ${{ steps.filter.outputs.order-service }}
-      user-service: ${{ steps.filter.outputs.user-service }}
-      terraform: ${{ steps.filter.outputs.terraform }}
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      order-service: ${{ steps.changes.outputs.order-service }}
+      user-service: ${{ steps.changes.outputs.user-service }}
+      terraform: ${{ steps.changes.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
       
-      - uses: dorny/paths-filter@v3
-        id: filter
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v3
         with:
           filters: |
             backend:
@@ -91,8 +110,12 @@ jobs:
   # Deploy infrastructure
   deploy-infrastructure:
     name: Deploy Infrastructure
-    needs: changes
-    if: needs.changes.outputs.terraform == 'true' || github.event.inputs.force_deploy == 'true'
+    needs: [wait-for-ci, manual-changes]
+    if: |
+      always() && !cancelled() &&
+      (needs.wait-for-ci.result == 'success' || needs.manual-changes.result == 'success') &&
+      ((needs.wait-for-ci.outputs.terraform == 'true' || needs.manual-changes.outputs.terraform == 'true') || 
+       github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
@@ -203,14 +226,14 @@ jobs:
   # Build and deploy services
   deploy-services:
     name: Deploy Services
-    needs: [changes, deploy-infrastructure, check-initial-deployment]
+    needs: [wait-for-ci, manual-changes, deploy-infrastructure, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
-      (needs.changes.outputs.backend == 'true' || 
-       needs.changes.outputs.frontend == 'true' || 
-       needs.changes.outputs.order-service == 'true' || 
-       needs.changes.outputs.user-service == 'true' ||
+      ((needs.wait-for-ci.outputs.backend == 'true' || needs.manual-changes.outputs.backend == 'true') ||
+       (needs.wait-for-ci.outputs.frontend == 'true' || needs.manual-changes.outputs.frontend == 'true') ||
+       (needs.wait-for-ci.outputs.order-service == 'true' || needs.manual-changes.outputs.order-service == 'true') ||
+       (needs.wait-for-ci.outputs.user-service == 'true' || needs.manual-changes.outputs.user-service == 'true') ||
        needs.check-initial-deployment.outputs.is_initial == 'true' ||
        github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
@@ -221,31 +244,29 @@ jobs:
           - name: backend
             path: be
             port: 3001
-            changed: ${{ needs.changes.outputs.backend }}
           - name: frontend
             path: fe
             port: 3000
-            changed: ${{ needs.changes.outputs.frontend }}
           - name: order-service
             path: order-service
             port: 3002
-            changed: ${{ needs.changes.outputs.order-service }}
           - name: user-service
             path: user-service
             port: 3003
-            changed: ${{ needs.changes.outputs.user-service }}
       fail-fast: false
     steps:
       - name: Check if deployment needed
         id: check
         run: |
           IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          CHANGED_PUSH="${{ needs.wait-for-ci.outputs[matrix.service.name] }}"
+          CHANGED_MANUAL="${{ needs.manual-changes.outputs[matrix.service.name] }}"
           
           if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=initial" >> $GITHUB_OUTPUT
             echo "Deploying ${{ matrix.service.name }} (initial deployment)" >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ matrix.service.changed }}" == "true" ]]; then
+          elif [[ "$CHANGED_PUSH" == "true" || "$CHANGED_MANUAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=changed" >> $GITHUB_OUTPUT
             echo "Deploying ${{ matrix.service.name }} (code changed)" >> $GITHUB_STEP_SUMMARY
@@ -314,7 +335,7 @@ jobs:
   # Update task definitions with Terraform after images are pushed
   update-task-definitions:
     name: Update Task Definitions
-    needs: [changes, deploy-services, check-initial-deployment]
+    needs: [wait-for-ci, manual-changes, deploy-services, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       needs.deploy-services.result == 'success'
@@ -360,7 +381,7 @@ jobs:
   # Force ECS to use updated task definitions
   redeploy-services:
     name: Redeploy Services
-    needs: [changes, update-task-definitions, check-initial-deployment]
+    needs: [wait-for-ci, manual-changes, update-task-definitions, check-initial-deployment]
     if: |
       always() && !cancelled() &&
       needs.update-task-definitions.result == 'success'
@@ -370,23 +391,21 @@ jobs:
       matrix:
         service:
           - name: backend
-            changed: ${{ needs.changes.outputs.backend }}
           - name: frontend
-            changed: ${{ needs.changes.outputs.frontend }}
           - name: order-service
-            changed: ${{ needs.changes.outputs.order-service }}
           - name: user-service
-            changed: ${{ needs.changes.outputs.user-service }}
       fail-fast: false
     steps:
       - name: Check if deployment needed
         id: check
         run: |
           IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
+          CHANGED_PUSH="${{ needs.wait-for-ci.outputs[matrix.service.name] }}"
+          CHANGED_MANUAL="${{ needs.manual-changes.outputs[matrix.service.name] }}"
           
           if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.service.changed }}" == "true" ]]; then
+          elif [[ "$CHANGED_PUSH" == "true" || "$CHANGED_MANUAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
@@ -490,7 +509,7 @@ jobs:
   # Deployment summary
   summary:
     name: Deployment Summary
-    needs: [changes, deploy-infrastructure, deploy-services]
+    needs: [wait-for-ci, manual-changes, deploy-infrastructure, deploy-services]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -551,9 +570,15 @@ jobs:
           echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          BACKEND_CHANGED="${{ needs.wait-for-ci.outputs.backend || needs.manual-changes.outputs.backend }}"
+          FRONTEND_CHANGED="${{ needs.wait-for-ci.outputs.frontend || needs.manual-changes.outputs.frontend }}"
+          ORDER_CHANGED="${{ needs.wait-for-ci.outputs.order-service || needs.manual-changes.outputs.order-service }}"
+          USER_CHANGED="${{ needs.wait-for-ci.outputs.user-service || needs.manual-changes.outputs.user-service }}"
+          TERRAFORM_CHANGED="${{ needs.wait-for-ci.outputs.terraform || needs.manual-changes.outputs.terraform }}"
+          
           echo "### Changes Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: ${{ needs.changes.outputs.backend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: ${{ needs.changes.outputs.frontend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Order Service: ${{ needs.changes.outputs.order-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- User Service: ${{ needs.changes.outputs.user-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Terraform: ${{ needs.changes.outputs.terraform == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ${{ needs.wait-for-ci.outputs.backend == 'true' || needs.manual-changes.outputs.backend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ needs.wait-for-ci.outputs.frontend == 'true' || needs.manual-changes.outputs.frontend == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Order Service: ${{ needs.wait-for-ci.outputs.order-service == 'true' || needs.manual-changes.outputs.order-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- User Service: ${{ needs.wait-for-ci.outputs.user-service == 'true' || needs.manual-changes.outputs.user-service == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform: ${{ needs.wait-for-ci.outputs.terraform == 'true' || needs.manual-changes.outputs.terraform == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
