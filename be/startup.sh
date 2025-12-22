@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 
 echo "Starting backend service..."
 
@@ -7,12 +6,12 @@ echo "Starting backend service..."
 echo "Generating Prisma client..."
 npx prisma generate
 
-# Run database migrations (safe - preserves data)
-echo "Running database migrations..."
-npx prisma migrate deploy
+# Always use db push for existing databases (safe, preserves data)
+echo "Syncing database schema..."
+npx prisma db push --skip-generate
 
-# Always run seed (it will upsert, not duplicate)
-echo "Running database seed..."
+# Seed will check internally if data exists
+echo "Running database seed (will skip if data exists)..."
 npx ts-node prisma/seed.ts || echo "Seeding failed, continuing anyway..."
 
 # Start the application

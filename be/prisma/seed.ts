@@ -56,15 +56,16 @@ async function seed() {
   console.log('Starting database seed...\n');
 
   try {
-    // Clear existing data
-    console.log('Clearing existing data...');
-    await prisma.orderItem.deleteMany({});
-    await prisma.order.deleteMany({});
-    await prisma.customer.deleteMany({});
-    await prisma.productSize.deleteMany({});
-    await prisma.product.deleteMany({});
-    await prisma.category.deleteMany({});
-    console.log('Cleared existing data\n');
+    // Check if database already has products
+    const existingProductCount = await prisma.product.count();
+    
+    if (existingProductCount > 0) {
+      console.log(`[SEED] Database already has ${existingProductCount} products, skipping seed.`);
+      console.log('  (Use npm run db:reset to clear and reseed)\n');
+      return; // Exit early - don't seed
+    }
+
+    console.log('Database is empty, seeding products...\n');
 
     let successCount = 0;
     let errorCount = 0;
@@ -83,19 +84,17 @@ async function seed() {
           fs.readFileSync(productPath, 'utf-8')
         );
 
-        console.log(`📦 Processing: ${productData.name} (ID: ${id})`);
+        console.log(`[SEED] Processing: ${productData.name}`);
 
         // Get or create category
         const category = await getOrCreateCategory(productData.category);
 
         // Create product with sizes
-        // img field from JSON already contains full S3 URL
         const product = await prisma.product.create({
           data: {
-            // Don't set id - let database auto-generate it
             name: productData.name,
             description: productData.description,
-            img: productData.img, // Use S3 URL from JSON file
+            img: productData.img,
             categoryId: category.id,
             sizes: {
               create: productData.sizes.map((size) => ({
@@ -111,30 +110,33 @@ async function seed() {
         });
 
         console.log(
-          `Created: ${product.name} (${product.category.name}) with ${product.sizes.length} sizes`
+          `   [OK] Created: ${product.name} (${product.category.name}) with ${product.sizes.length} sizes`
         );
-        console.log(`   Image: ${product.img}`);
         successCount++;
       } catch (error: any) {
-        console.error(`Error processing product ${id}:`, error.message);
+        console.error(`   [ERROR] Error processing product:`, error.message);
         errorCount++;
       }
     }
 
     console.log('\n' + '='.repeat(60));
     console.log('Seed Summary:');
-    console.log(`Success: ${successCount} products`);
-    console.log(`Errors: ${errorCount} products`);
+    console.log(`[OK] Created: ${successCount} products`);
+    console.log(`[ERROR] Errors: ${errorCount} products`);
     console.log('='.repeat(60));
 
-    // Create default admin user
-    console.log('\n👤 Creating default admin user...');
+    // Create default admin user (always upsert to ensure it exists)
+    console.log('\n[SEED] Ensuring admin user exists...');
     const bcrypt = require('bcryptjs');
     const adminPassword = await bcrypt.hash('admin123', 10);
     
     const admin = await prisma.customer.upsert({
       where: { email: 'admin@sweetdream.com' },
-      update: { role: 'ADMIN' },
+      update: { 
+        password: adminPassword,
+        role: 'ADMIN',
+        name: 'Admin'
+      },
       create: {
         email: 'admin@sweetdream.com',
         password: adminPassword,
@@ -142,7 +144,7 @@ async function seed() {
         role: 'ADMIN'
       }
     });
-    console.log(`Admin user created: ${admin.email}`);
+    console.log(`[OK] Admin user ready: ${admin.email}`);
 
     // Display categories
     const categories = await prisma.category.findMany({

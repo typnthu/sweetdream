@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 
 echo "Starting user service..."
 
@@ -7,12 +6,12 @@ echo "Starting user service..."
 echo "Generating Prisma client..."
 npx prisma generate
 
-# Run database migrations (safe - preserves data)
-echo "Running database migrations..."
-npx prisma migrate deploy
+# Always use db push for existing databases (safe, preserves data)
+echo "Syncing database schema..."
+npx prisma db push --skip-generate
 
-# Always run seed to ensure admin user exists with correct password
-echo "Running database seed (creates/updates admin user)..."
+# Seed will check internally if admin exists
+echo "Running database seed (will skip if admin exists)..."
 npx ts-node prisma/seed.ts || echo "Seeding failed, continuing anyway..."
 
 # Start the application

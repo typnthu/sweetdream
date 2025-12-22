@@ -11,6 +11,7 @@
     "generate": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
+    "db:reset": "npx prisma migrate reset",
     "seed": "ts-node prisma/seed.ts",
     "test": "echo 'No tests configured' && exit 0"
   },
