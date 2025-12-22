@@ -262,7 +262,7 @@ resource "aws_lb_target_group" "order_service_green" {
   depends_on = [aws_lb.main]
 }
 
-# HTTP Listener - CodeDeploy manages Blue/Green
+# HTTP Listener - Weighted routing for Blue/Green
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
