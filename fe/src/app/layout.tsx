@@ -10,7 +10,7 @@ import { AuthProvider } from "../context/AuthContext";
 import type { Metadata } from 'next'; 
 
 export const metadata: Metadata = {
-  title: 'SweetDream Bakery - Bánh Kem Tươi Ngon',
+  title: 'dev-SweetDream Bakery - Bánh Kem Tươi Ngon',
   description: 'SweetDream chuyên các loại bánh ngọt thơm ngon, được làm từ nguyên liệu tươi sạch. Bánh mousse, tiramisu, bánh kem, bánh mì ngọt.',
   icons: {
     icon: [
