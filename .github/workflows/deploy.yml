@@ -232,23 +232,47 @@ jobs:
         id: check
         run: |
           IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
-          CHANGED="${{ needs.wait-for-ci.outputs[matrix.service.name] }}"
+          SERVICE_NAME="${{ matrix.service.name }}"
+          
+          # Get changed status for this service
+          case "$SERVICE_NAME" in
+            "backend")
+              CHANGED="${{ needs.wait-for-ci.outputs.backend }}"
+              ;;
+            "frontend")
+              CHANGED="${{ needs.wait-for-ci.outputs.frontend }}"
+              ;;
+            "order-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.order-service }}"
+              ;;
+            "user-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.user-service }}"
+              ;;
+            *)
+              CHANGED="false"
+              ;;
+          esac
+          
+          echo "Service: $SERVICE_NAME"
+          echo "Changed: $CHANGED"
+          echo "Initial: $IS_INITIAL"
+          echo "Force: ${{ github.event.inputs.force_deploy }}"
           
           if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=initial" >> $GITHUB_OUTPUT
-            echo "Deploying ${{ matrix.service.name }} (initial deployment)" >> $GITHUB_STEP_SUMMARY
+            echo "Deploying $SERVICE_NAME (initial deployment)" >> $GITHUB_STEP_SUMMARY
           elif [[ "$CHANGED" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=changed" >> $GITHUB_OUTPUT
-            echo "Deploying ${{ matrix.service.name }} (code changed)" >> $GITHUB_STEP_SUMMARY
+            echo "Deploying $SERVICE_NAME (code changed)" >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "reason=forced" >> $GITHUB_OUTPUT
-            echo "Deploying ${{ matrix.service.name }} (forced)" >> $GITHUB_STEP_SUMMARY
+            echo "Deploying $SERVICE_NAME (forced)" >> $GITHUB_STEP_SUMMARY
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
-            echo "Skipping ${{ matrix.service.name }} (no changes)" >> $GITHUB_STEP_SUMMARY
+            echo "Skipping $SERVICE_NAME (no changes)" >> $GITHUB_STEP_SUMMARY
           fi
       
       - uses: actions/checkout@v4
@@ -372,7 +396,26 @@ jobs:
         id: check
         run: |
           IS_INITIAL="${{ needs.check-initial-deployment.outputs.is_initial }}"
-          CHANGED="${{ needs.wait-for-ci.outputs[matrix.service.name] }}"
+          SERVICE_NAME="${{ matrix.service.name }}"
+          
+          # Get changed status for this service
+          case "$SERVICE_NAME" in
+            "backend")
+              CHANGED="${{ needs.wait-for-ci.outputs.backend }}"
+              ;;
+            "frontend")
+              CHANGED="${{ needs.wait-for-ci.outputs.frontend }}"
+              ;;
+            "order-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.order-service }}"
+              ;;
+            "user-service")
+              CHANGED="${{ needs.wait-for-ci.outputs.user-service }}"
+              ;;
+            *)
+              CHANGED="false"
+              ;;
+          esac
           
           if [[ "$IS_INITIAL" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
