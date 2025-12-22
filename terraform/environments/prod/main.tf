@@ -281,6 +281,9 @@ module "ecs_order_service" {
   # S3 Bucket
   s3_bucket = module.s3.bucket_name
 
+  # Service-to-Service Communication
+  user_service_url = "http://${module.service_discovery.user_service_dns_name}:3003"
+
   # CloudWatch Logs
   environment        = var.environment
   log_retention_days = var.log_retention_days

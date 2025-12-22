@@ -8,7 +8,4 @@ output "ecs_task_role_arn" {
   value       = aws_iam_role.ecs_task.arn
 }
 
-output "codedeploy_ecs_role_arn" {
-  description = "ARN of CodeDeploy ECS role"
-  value       = aws_iam_role.codedeploy_ecs.arn
-}
+# CodeDeploy output removed - no longer using Blue/Green deployment
