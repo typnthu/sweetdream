@@ -265,13 +265,12 @@ module "ecs_order_service" {
   execution_role_arn = module.iam.ecs_execution_role_arn
   task_role_arn      = module.iam.ecs_task_role_arn
 
-  # Load Balancer
-  enable_load_balancer = true
-  target_group_arn     = module.alb.order_service_blue_target_group_arn
+  # Load Balancer (not exposed via ALB, uses service discovery)
+  enable_load_balancer = false
 
-  # Service Discovery (disabled for ALB services)
-  enable_service_discovery = false
-  service_discovery_arn    = ""
+  # Service Discovery (for internal communication)
+  enable_service_discovery = true
+  service_discovery_arn    = module.service_discovery.order_service_arn
 
   # Database Configuration
   db_host     = module.rds.db_address
@@ -330,8 +329,8 @@ module "ecs_frontend" {
 
   # Service URLs for frontend
   backend_url       = "http://${module.service_discovery.backend_dns_name}:3001"
-  user_service_url  = "http://${module.alb.alb_dns_name}"
-  order_service_url = "http://${module.alb.alb_dns_name}"
+  user_service_url  = "http://${module.service_discovery.user_service_dns_name}:3003"
+  order_service_url = "http://${module.service_discovery.order_service_dns_name}:3002"
 
   # Database Configuration
   db_host     = module.rds.db_address
