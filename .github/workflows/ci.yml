@@ -233,4 +233,8 @@ jobs:
           echo "| User Service | ${{ needs.changes.outputs.user-service }} | ${{ needs.user-service.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Terraform | ${{ needs.changes.outputs.terraform }} | ${{ needs.terraform.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status:** ${{ steps.status.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Next Step:** Deployment workflow will start automatically if CI passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** workflow_run trigger only works when deploy.yml exists on default branch" >> $GITHUB_STEP_SUMMARY
